@@ -10,11 +10,12 @@ Run fo_solver.py
 
 Change initial configurations as desired in the fo_solver.py file:
 
-n (side of the total n x n grid)
-config (distribution of positive probability cells, currently set to block, meaning positive regions appear as large squares)
-num_blocks (number of positive probability blocks)
-num_obstacles (number of obstacles)
-obstacle_type (type of obstacles, currently set to block, same as above)
-square_size (length of reward blocks)
-gamma (discount factor for the MDP)
+1. n (side of the total n x n grid)
+2. config (distribution of positive probability cells, currently set to block, meaning positive regions appear as large squares)
+3. num_blocks (number of positive probability blocks)
+4. num_obstacles (number of obstacles)
+5. obstacle_type (type of obstacles, currently set to block, same as above)
+6. square_size (length of reward blocks)
+7. gamma (discount factor for the MDP)
+8. random_map (set to True if you want to generate a random map for each run). If set to False, it uses the map stored in mdp_data.pkl.
 
