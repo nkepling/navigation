@@ -20,7 +20,7 @@ gamma = 0.8
 random_map = True
 
 # Function for Value Iteration
-def value_iteration(n, rewards, obstacles, gamma, threshold=1e-6):
+def value_iteration(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
     # Initialize the value function
     V = np.zeros((n, n))
     while True:
@@ -44,7 +44,7 @@ def value_iteration(n, rewards, obstacles, gamma, threshold=1e-6):
     return V
 
 # Function to extract the policy
-def extract_policy(V, obstacles):
+def extract_policy(V, obstacles,neighbors):
     policy = np.zeros((n, n, 2))
 
     for i in range(n):
@@ -62,7 +62,7 @@ def extract_policy(V, obstacles):
 
     return policy
 
-def policy_iteration(rewards, obstacles, next_states, gamma, threshold=1e-6):
+def policy_iteration(rewards, obstacles, next_states, gamma,threshold=1e-6):
     n = rewards.shape[0]
 
     # Initialize policy randomly
@@ -163,7 +163,7 @@ def visualize_rewards(rewards, obstacles, start, goal, curr_pos=None, next_pos=N
 
     ax.plot(start[1], start[0], 'bo')
     ax.plot(goal[1], goal[0], 'go')
-
+    
     if curr_pos is not None:
         if next_pos[0] < curr_pos[0]:
             ax.arrow(j, i, 0, -0.5, head_width=0.2, head_length=0.2, fc='r', ec='r')
@@ -180,6 +180,9 @@ def visualize_rewards(rewards, obstacles, start, goal, curr_pos=None, next_pos=N
 
 
 if __name__ == "__main__":
+    from nn_training import *
+    import torch
+
     if not random_map:
         with open('mdp_data.pkl', 'rb') as f:
             rewards, obstacles_map, neighbors = pickle.load(f)
@@ -190,7 +193,8 @@ if __name__ == "__main__":
         # Save the data to a file using pickle
         with open('mdp_data.pkl', 'wb') as f:
             pickle.dump((rewards, obstacles_map, neighbors), f)
-
+    
+    # print("Rewards:", rewards)
     """ Simple Value Iteration"""
     # start_time = time.time()
     # V = value_iteration(n, rewards, obstacles_map, gamma)
@@ -206,16 +210,28 @@ if __name__ == "__main__":
     if start == goal:
         print("the agent is already in the target position")
 
+    model = ValueIterationModel()
+    model.load_state_dict(torch.load("value_iteration_model.pth",weights_only=True))
+    model.eval()
+
     agent_position = deepcopy(start)
     while agent_position!=goal:
         # mark current position as 0 reward
         rewards[agent_position[0], agent_position[1]] = 0
-        V = value_iteration(n, rewards, obstacles_map, gamma)
-        policy = extract_policy(V, obstacles_map)
+        #V = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
+
+        input = reformat_input(rewards, obstacles_map)
+        V = model(input)
+        V = V.squeeze().detach().numpy()
+
+        policy = extract_policy(V, obstacles_map,neighbors)
+        # # # print(policy)
+        # # print(policy.shape)
         next_position = tuple(int(i) for i in policy[agent_position])
         print("Agent next state is {}".format(next_position))
         i, j = agent_position[0], agent_position[1]
-        visualize_rewards(rewards, obstacles_map, start, goal, agent_position, next_position)
+        # visualize_rewards(rewards, obstacles_map, start, goal, agent_position, next_position)
+        visualize_policy_and_rewards(rewards, obstacles_map, policy)
         agent_position = next_position
 
 
