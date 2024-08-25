@@ -3,12 +3,15 @@ Utility File
 """
 import numpy as np
 import random
-
+import yaml
+import argparse
 """
 Takes config: single double random
 and size n as inputs
 """
-def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10):
+def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
+    if seed:
+        np.random.seed(seed)
     rewards = np.zeros((n, n))
     obstacles_map = np.zeros((n, n), dtype=bool)
 
@@ -23,15 +26,18 @@ def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square
             end_y = min(start_y + square_size, n)
 
             # Place positive rewards between 1 and 10 in the defined square
-            rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 100, (end_x - start_x, end_y - start_y))
+            rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 100, (end_x - start_x, end_y - start_y),)
             # rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 2, (end_x - start_x, end_y - start_y))
 
         # Normalize rewards to sum to 1
         total_sum = np.sum(rewards)
         if total_sum != 0:
             rewards = rewards / total_sum
+    
+    if obstacle_map is not None:
+        obstacles_map = obstacle_map
 
-    if num_obstacles > 0:
+    elif num_obstacles > 0:
         obstacle_square_size = 4
         if obstacle_type == "random":  # Randomly place obstacles
             for _ in range(num_obstacles):
@@ -96,16 +102,66 @@ def pick_start_and_goal(rewards, obstacles):
         raise ValueError("No positive rewards to sample from.")
 
     probabilities = flat_rewards / total_sum
-    goal_index = np.random.choice(np.arange(len(flat_rewards)), p=probabilities)
-    target = np.unravel_index(goal_index, rewards.shape)
-    target = tuple([int(i) for i in target])
+    while True:
+        goal_index = np.random.choice(np.arange(len(flat_rewards)), p=probabilities)
+        target = np.unravel_index(goal_index, rewards.shape)
+        target = tuple([int(i) for i in target])
+        if not obstacles[target] or target == (0, 0):
+            break
+    
+   
 
     # randomly sample start position
     start = (0, 0)
-    print(f"Start: {start}")
-    print(f"Target: {target}")
+    # print(f"Start: {start}")
+    # print(f"Target: {target}")
     return start, target
 
+
+def load_env_config(config_file):
+    with open(config_file, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    return config
+
+
+def parse_arguments():
+    """Get environment configuration from the command line arguments
+
+    Returns:
+        n: int: size of the grid
+        num_blocks: int: number of positive reward blocks
+        config: str: types of positive reward distribution (block)
+        num_obstacles: int: number of obstacles
+        obstacle_type: str: type of obstacle distribution
+        square_size: int: size of the positive reward square
+        random_map: bool: whether to generate a random map
+        gamma: float: discount factor
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env_config", type=str, default="env_config.yaml", help="Path to the config file")
+    args = parser.parse_args()
+    env_config = load_env_config(args.env_config)
+    n = env_config["n"]
+    config = env_config["config"]
+    num_blocks = env_config["num_blocks"]
+    num_obstacles = env_config["num_obstacles"]
+    obstacle_type = env_config["obstacle_type"]
+    square_size = env_config["square_size"]
+    random_map = env_config["random_map"]
+    gamma = env_config["gamma"]
+
+    return n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    pass
+    
+    
 
 
 

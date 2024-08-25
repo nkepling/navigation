@@ -8,6 +8,8 @@ import random
 import torch.nn.functional as F
 from fo_solver import value_iteration, extract_policy, visualize_policy_and_rewards, visualize_rewards, pick_start_and_goal
 from copy import deepcopy
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 n = 10  # size of the grid
 config = "block"  # distribution of positive probability cells
@@ -31,6 +33,8 @@ else:
     device = torch.device("cpu")
 
 def reformat_input(rewards, obstacles_map):
+    """Reformat the input for the NN model
+    """
     rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(0)
     obstacles_map = torch.tensor(obstacles_map, dtype=torch.float32).unsqueeze(0)
     input = torch.cat((rewards, obstacles_map), dim=0)
@@ -40,10 +44,10 @@ def reformat_output(V):
     return torch.tensor(V, dtype=torch.float32).unsqueeze(0)
 
 
-def generate_data():
+def generate_data(obstacle_map=None):
     """Generate map and target for value iteration 
     """
-    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size)
+    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map)
     neighbors = precompute_next_states(n,obstacles_map)    
     target = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
     target = reformat_output(target)
@@ -59,7 +63,7 @@ def generate_policy_data():
     neighbors = precompute_next_states(n,obstacles_map)    
     target = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
     policy = extract_policy(target, obstacles_map,neighbors)
-    
+
     target = reformat_output(policy)
     input = reformat_input(rewards, obstacles_map)
 
@@ -68,14 +72,15 @@ def generate_policy_data():
 class ValueIterationDataset(Dataset):
     """Value Iteration Dataset
     """
-    def __init__(self, num_samples):
+    def __init__(self, num_samples,obstacle_map=None):
         self.num_samples = num_samples
+        self.obstacle_map = obstacle_map
 
     def __len__(self):
         return self.num_samples
 
     def __getitem__(self, idx):
-        input, target = generate_data()
+        input, target = generate_data(self.obstacle_map)
         return input, target
     
 class PolicyDataset(Dataset):
@@ -169,27 +174,46 @@ class PolicyModel(torch.nn.Module):
         return x
 
 
+class UNet(torch.nn.Module):
+    def __init__(self):
+        pass
 
-def train_model(dataloader,model): 
-    """Train the Value Iteration model
-    """
-    # model = ValueIterationModel().to(device)
+    def forward(self, x): 
+        pass
+
+def train_model(dataloader, model, model_path): 
+    """Train the Value Iteration model"""
     model = model.to(device)
     criterion = torch.nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001,weight_decay=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-4)
     num_epochs = 10
     model.train()
+    epoch_loss = []
+
     for epoch in range(num_epochs):
-        for i, data in enumerate(dataloader):
-            inputs, targets = data
-            inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
-            print(f"Epoch {epoch}, Batch {i}, Loss: {loss.item()}")
-    torch.save(model.state_dict(), "deeper_value_iteration_model.pth")
+        acc_loss = 0
+        with tqdm(total=len(dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
+            for i, data in enumerate(dataloader):
+                inputs, targets = data
+                inputs, targets = inputs.to(device), targets.to(device)
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                acc_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                pbar.set_postfix(loss=loss.item())
+                pbar.update(1)
+                
+        epoch_loss.append(acc_loss / len(dataloader))
+
+    torch.save(model.state_dict(), model_path)
+
+    plt.plot([i for i in range(num_epochs)], epoch_loss)
+    plt.xlabel("Epoch") 
+    plt.ylabel("Loss")
+    plt.title("Training Loss")
+    plt.show()
 
 def eval_model(dataloader,model,model_path="deeper_value_iteration_model.pth"):
     """Evaluate the Value Iteration model
@@ -216,61 +240,23 @@ def eval_model(dataloader,model,model_path="deeper_value_iteration_model.pth"):
     return average_mse
 
 
-
-
-
 if __name__ == "__main__":
-    num_samples = 10000
-    dataset = ValueIterationDataset(num_samples)
+    from eval import *
+    num_samples = 50000
+
+    with open('obstacle.pkl', 'rb') as f:
+        f.seek(0) 
+        obstacles_map = pickle.load(f)
+
+    dataset = ValueIterationDataset(num_samples,obstacles_map)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-    for idx, data in enumerate(dataloader):
-        inputs, targets = data
-        print(inputs.shape, targets.shape)
-        break
-
-    # train_model(dataloader,DeeperValueIterationModel())
-    # average_mse = eval_model(dataloader,DeeperValueIterationModel(),model_path="deeper_value_iteration_model.pth")
-    # print(f"Average MSE Loss: {average_mse}")
+    model_path = "value_function_fixed_map_2.pth"
+    train_model(dataloader,DeeperValueIterationModel(),model_path)
 
 
-    
 
-    """ Navigation """
-    # model = ValueIterationModel()
-    # model.load_state_dict(torch.load("value_iteration_model.pth",weights_only=True))
-    # model.eval()
-
-    model = DeeperValueIterationModel()
-    model.load_state_dict(torch.load("deeper_value_iteration_model.pth",weights_only=True))
-    model.eval()
-    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size)
-    neighbors = precompute_next_states(n, obstacles_map)
-
-    start, goal = pick_start_and_goal(rewards, obstacles_map)
-    visualize_rewards(rewards, obstacles_map, start, goal)
-
-    if start == goal:
-        print("the agent is already in the target position")
-
-    agent_position = deepcopy(start)
-    while agent_position!=goal:
-        # mark current position as 0 reward
-        rewards[agent_position[0], agent_position[1]] = 0
-
-        input = reformat_input(rewards, obstacles_map)
-        V = model(input)
-
-        V = V.squeeze().detach().numpy()
-        policy = extract_policy(V, obstacles_map,neighbors)
-        
-        next_position = tuple(int(i) for i in policy[agent_position])
-        print("Agent next state is {}".format(next_position))
-        i, j = agent_position[0], agent_position[1]
-        # visualize_rewards(rewards, obstacles_map, start, goal, agent_position, next_position)
-        visualize_policy_and_rewards(rewards, obstacles_map, policy)
-        agent_position = next_position
-
+  
 
 
 

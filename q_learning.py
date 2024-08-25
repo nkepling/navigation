@@ -8,7 +8,6 @@ import matplotlib.colors as mcolors
 import hashlib
 import time
 
-
 class GridEnvironment:
     def __init__(self, n, rewards, obstacles, start, target):
         self.n = n
@@ -17,13 +16,13 @@ class GridEnvironment:
         self.start = start
         self.target = target
         self.obstacles = obstacles
-        self.reset()
+        # self.reset()
 
     def reset(self):
         self.current_position = self.start
         self.rewards = self.initial_rewards.copy()
         self.visited = np.zeros((self.n, self.n), dtype=bool)
-        return self.current_position, self.visited.copy()
+        return (self.current_position, self.visited.copy()), {}
 
     def step(self, action):
         i, j = self.current_position
@@ -51,8 +50,8 @@ class GridEnvironment:
             reward = 0
 
         done = self.current_position == self.target
-
-        return (self.current_position, self.visited.copy()), reward, done
+        return (self.current_position, self.visited.copy()), reward, done, False, {}
+        # return (self.current_position, self.visited.copy()), reward, done
 
     def get_valid_actions(self):
         i, j = self.current_position
@@ -128,111 +127,114 @@ class QLearningAgent:
 #     ax.grid(True)
 #     plt.show()
 
+if __name__ == "__main__":
 
-# Define the input map
-n = 10  # size of the grid
-config = "block"  # distribution of positive probability cells
-num_blocks = 3  # number of positive region blocks
-num_obstacles = 3  # number of obstacles
-obstacle_type = "block"
-square_size = 4  # size of the positive region square
-rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size)
-neighbors = precompute_next_states(n, obstacles_map)
-start, target = pick_start_and_goal(rewards, obstacles_map)
-visualize_rewards(rewards, obstacles_map, start, target)
+    # Define the input map
+    n = 10  # size of the grid
+    config = "block"  # distribution of positive probability cells
+    num_blocks = 3  # number of positive region blocks
+    num_obstacles = 3  # number of obstacles
+    obstacle_type = "block"
+    square_size = 4  # size of the positive region square
+    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size)
+    neighbors = precompute_next_states(n, obstacles_map)
+    start, target = pick_start_and_goal(rewards, obstacles_map)
+    visualize_rewards(rewards, obstacles_map, start, target)
 
-# Create the environment
-env = GridEnvironment(n, rewards, obstacles_map, start, target)
-# Create the Q-learning agent
-state_space_size = env.get_state_space_size()
-action_space_size = env.get_action_space_size()
-agent = QLearningAgent(state_space_size, action_space_size)
+    # Create the environment
+    env = GridEnvironment(n, rewards, obstacles_map, start, target)
+    # Create the Q-learning agent
+    state_space_size = env.get_state_space_size()
+    action_space_size = env.get_action_space_size()
+    agent = QLearningAgent(state_space_size, action_space_size)
 
-# Training loop
-num_episodes = 10000
-max_steps_per_episode = 100
+    # Training loop
+    num_episodes = 10000
+    max_steps_per_episode = 100
 
-start_time = time.time()
-for episode in range(num_episodes):
-    position, visited = env.reset()
+    start_time = time.time()
+    for episode in range(num_episodes):
+        obs,_ = env.reset()
+        position, visited = obs
+        state = agent.get_state_index(position, visited)
+        total_reward = 0
+
+        for step in range(max_steps_per_episode):
+            valid_actions = env.get_valid_actions()
+            action = agent.choose_action(state, valid_actions)
+            (next_position, next_visited), reward, done,_,_ = env.step(action)
+            next_state = agent.get_state_index(next_position, next_visited)
+
+            agent.update(state, action, reward, next_state, valid_actions)
+
+            position, visited = next_position, next_visited
+            state = next_state
+            total_reward += reward
+
+            if done:
+                break
+
+        # if (episode + 1) % 100 == 0:
+        #     print(f"Episode {episode + 1}, Total Reward: {total_reward}")
+    end_time = time.time()
+    print("Training completed in {} seconds".format(end_time-start_time))
+
+    # Evaluation
+    obs,_ = env.reset()
+    position, visited = obs
     state = agent.get_state_index(position, visited)
     total_reward = 0
+    path = [env.current_position]
 
     for step in range(max_steps_per_episode):
         valid_actions = env.get_valid_actions()
+        start_time = time.time()
         action = agent.choose_action(state, valid_actions)
-        (next_position, next_visited), reward, done = env.step(action)
+        end_time = time.time()
+        print("Inference completed in {} seconds".format(end_time - start_time))
+        (next_position, next_visited), reward, done,_,_ = env.step(action)
         next_state = agent.get_state_index(next_position, next_visited)
-
-        agent.update(state, action, reward, next_state, valid_actions)
 
         position, visited = next_position, next_visited
         state = next_state
         total_reward += reward
+        path.append(next_position)
+
 
         if done:
             break
 
-    # if (episode + 1) % 100 == 0:
-    #     print(f"Episode {episode + 1}, Total Reward: {total_reward}")
-end_time = time.time()
-print("Training completed in {} seconds".format(end_time-start_time))
-
-# Evaluation
-position, visited = env.reset()
-state = agent.get_state_index(position, visited)
-total_reward = 0
-path = [env.current_position]
-
-for step in range(max_steps_per_episode):
-    valid_actions = env.get_valid_actions()
-    start_time = time.time()
-    action = agent.choose_action(state, valid_actions)
-    end_time = time.time()
-    print("Inference completed in {} seconds".format(end_time - start_time))
-    (next_position, next_visited), reward, done = env.step(action)
-    next_state = agent.get_state_index(next_position, next_visited)
-
-    position, visited = next_position, next_visited
-    state = next_state
-    total_reward += reward
-    path.append(next_position)
+    print(f"Evaluation complete. Total Reward: {total_reward}")
+    print(f"Path taken: {path}")
 
 
-    if done:
-        break
+    # Visualization
+    def visualize_path(path, rewards, target, obstacles):
+        fig, ax = plt.subplots(figsize=(10, 10))
+        display_matrix = np.copy(rewards)
+        display_matrix[obstacles] = np.nan  # Set obstacles to NaN for black color
 
-print(f"Evaluation complete. Total Reward: {total_reward}")
-print(f"Path taken: {path}")
+        cmap = plt.cm.viridis
+        cmap.set_bad(color='red')
+        cmap.set_under(color='red')
+        bounds = np.linspace(0, 1, 256)
+        new_cmap = mcolors.ListedColormap(cmap(bounds))
 
+        masked_display_matrix = np.ma.masked_where(display_matrix == -1, display_matrix)
+        ax.imshow(masked_display_matrix, cmap=new_cmap, origin='upper')
+        ax.plot(target[1], target[0], 'go')  # Target position in green
 
-# Visualization
-def visualize_path(path, rewards, target, obstacles):
-    fig, ax = plt.subplots(figsize=(10, 10))
-    display_matrix = np.copy(rewards)
-    display_matrix[obstacles] = np.nan  # Set obstacles to NaN for black color
-
-    cmap = plt.cm.viridis
-    cmap.set_bad(color='red')
-    cmap.set_under(color='red')
-    bounds = np.linspace(0, 1, 256)
-    new_cmap = mcolors.ListedColormap(cmap(bounds))
-
-    masked_display_matrix = np.ma.masked_where(display_matrix == -1, display_matrix)
-    ax.imshow(masked_display_matrix, cmap=new_cmap, origin='upper')
-    ax.plot(target[1], target[0], 'go')  # Target position in green
-
-    # Plot arrows for the agent's path
-    for k in range(len(path) - 1):
-        start_i, start_j = path[k]
-        end_i, end_j = path[k + 1]
-        dx = end_j - start_j
-        dy = end_i - start_i
-        ax.arrow(start_j, start_i, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
-    ax.invert_yaxis()
-    ax.grid(True)
-    plt.show()
+        # Plot arrows for the agent's path
+        for k in range(len(path) - 1):
+            start_i, start_j = path[k]
+            end_i, end_j = path[k + 1]
+            dx = end_j - start_j
+            dy = end_i - start_i
+            ax.arrow(start_j, start_i, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
+        ax.invert_yaxis()
+        ax.grid(True)
+        plt.show()
 
 
-visualize_path(path, rewards, target, obstacles_map)
+    visualize_path(path, rewards, target, obstacles_map)
 
