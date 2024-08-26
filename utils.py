@@ -5,6 +5,7 @@ import numpy as np
 import random
 import yaml
 import argparse
+import torch
 """
 Takes config: single double random
 and size n as inputs
@@ -152,9 +153,15 @@ def parse_arguments():
 
     return n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
 
+def format_input_for_ddqn_cnn(state):
+    if not isinstance(state,torch.Tensor):
+        state = torch.tensor(state)
+        state = state.float()
+    
+    state = state.unsqueeze(0)
+    assert(state.shape == (1,3,10,10))
 
-
-
+    return state
 
 
 

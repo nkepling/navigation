@@ -1,51 +1,81 @@
-from ns_gym.benchmark_algorithms import DDQN
-from q_learning import GridEnvironment
+from ddqn import DQNAgent, CNN
+from gridworld_env import GridEnvironment
 from utils import * 
 from fo_solver import visualize_rewards
 from eval import visually_compare_value_functions, visually_compare_policy
 import pickle
 import torch
+from collections import deque
+import os
+import numpy as np
+from tqdm import tqdm
+from utils import format_input_for_ddqn_cnn
+
+n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
 
 
+def dim_check(state):
+    if (state.shape == (3,10,10)):
+        state = state.unsqueeze(0)
+    assert(state.shape == (1,3,10,10))
+    return state
 
-
-n,config,num_blocks,num_obstacles,obstacle_type,square_size,random_map,gamma= parse_arguments()
-
-def train(num_episodes, env, agent, epsilon, gamma, lr, batch_size, target_update, replay_buffer_size, seed):
+def train(model_name, num_episodes, eps, eps_end, eps_decay, lr, max_steps_per_episode):
 
     with open('obstacle.pkl', 'rb') as f:
         obstacles_map = pickle.load(f)
-
-    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size, obstacle_map=obstacles_map)
-    neighbors = precompute_next_states(n, obstacles_map)
-    agent = DDQN.DQNAgent()
-    for ep in num_episodes:
-        start,goal = pick_start_and_goal(rewards, obstacles_map)
+    
+    model = CNN().to(device)
+    agent = DQNAgent(model=model, model_path=None, lr=lr)
+    
+    scores_window = deque(maxlen=100)
+    best_score = -np.inf
+    
+    # Use tqdm for progress bar
+    for ep in tqdm(range(num_episodes), desc="Training Progress", unit="episode"):
+        rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size, obstacle_map=obstacles_map)
+        start, goal = pick_start_and_goal(rewards, obstacles_map)
         env = GridEnvironment(n, rewards, obstacles_map, start, goal)
+        out = env.reset()
+        state = env.get_cnn_input()  # Initialize the state
+        score = 0
+        t = 0
+        
+        while True:
+            action, values = agent.act(format_input_for_ddqn_cnn(state).to(device), eps)
+            next_state, reward, done, truncated, _ = env.step(action)
+            next_state = env.get_cnn_input()
+            
+            agent.step(state, action, reward, next_state, done)
+            state = next_state
+            score += reward
+            
+            if done or truncated or t >= max_steps_per_episode:
+                break
+            t += 1
+        
+        scores_window.append(score)
+        eps = max(eps_end, eps_decay * eps)
 
-        for step in range(max_steps_per_episode):
-            position, visited,{} = env.reset()
-            state = agent.get_state_index(position, visited)
-            total_reward = 0
+        if ep % 100 == 0:
+            print(f"\nFinished episode {ep}")
+            torch.save(agent.q_network_local.state_dict(), os.path.join(saved_model_dir, f"{model_name}_ep_{ep}"))
 
-            for step in range(max_steps_per_episode):
-                valid_actions = env.get_valid_actions()
-                action = agent.choose_action(state, valid_actions)
-                (next_position, next_visited), reward, done,_,_ = env.step(action)
-                next_state = agent.get_state_index(next_position, next_visited)
+        if np.mean(scores_window) > best_score:
+            best_score = np.mean(scores_window)
+            print(f"\nBest model found at episode {ep} with score {best_score}")
+            torch.save(agent.q_network_local.state_dict(), os.path.join(saved_model_dir, f"{model_name}_best"))
 
-                agent.update(state, action, reward, next_state, valid_actions)
-
-                position, visited = next_position, next_visited
-                state = next_state
-                total_reward += reward
-
-                if done:
-                    break
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    current_dir = os.path.dirname(__file__)
+    os.makedirs(os.path.join(current_dir, 'DDQN_weights'), exist_ok=True)
+    saved_model_dir = os.path.join(current_dir, 'DDQN_weights')
+    model_name = "DQQN_Model"
+    train(model_name, num_episodes=1500, eps=1.0, eps_end=0.01, eps_decay=0.997, lr=0.001, max_steps_per_episode=200)

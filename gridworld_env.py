@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class GridEnvironment:
     def __init__(self, n, rewards, obstacles, start, target):
         self.n = n
@@ -79,25 +80,26 @@ class GridEnvironment:
     
 
 if __name__ == "__main__":
-    from utils import *
-    import pickle
-    from fo_solver import visualize_rewards
+    # from utils import *
+    # import pickle
+    # from fo_solver import visualize_rewards
 
-    n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
+    # n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
 
-    with open('obstacle.pkl', 'rb') as f:
-        obstacles_map = pickle.load(f)
+    # with open('obstacle.pkl', 'rb') as f:
+    #     obstacles_map = pickle.load(f)
 
-    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size, obstacle_map=obstacles_map)
+    # rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size, obstacle_map=obstacles_map)
 
-    start, goal = pick_start_and_goal(rewards, obstacles_map)
+    # start, goal = pick_start_and_goal(rewards, obstacles_map)
 
-    env = GridEnvironment(n, rewards, obstacles_map, start, goal)
+    # env = GridEnvironment(n, rewards, obstacles_map, start, goal)
 
-    obs, _ = env.reset()
-    done = False
+    # obs, _ = env.reset()
+    # done = False
 
-    t = env.get_cnn_input()
-    print(t.shape)
+    # t = env.get_cnn_input()
+    # print(t.shape)
+    pass
 
     

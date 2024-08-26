@@ -225,22 +225,23 @@ def get_comparison_metrics(seeds):
 
 
 if __name__ == "__main__":
-    with open('obstacle.pkl', 'rb') as f:
-        obstacles_map = pickle.load(f)
+    pass
+    # with open('obstacle.pkl', 'rb') as f:
+    #     obstacles_map = pickle.load(f)
 
-    rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map)
+    # rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map)
 
-    neighbors = precompute_next_states(n, obstacles_map)
+    # neighbors = precompute_next_states(n, obstacles_map)
 
-    start, goal = pick_start_and_goal(rewards, obstacles_map)
+    # start, goal = pick_start_and_goal(rewards, obstacles_map)
 
-    model = DeeperValueIterationModel()
-    model.load_state_dict(torch.load("value_function_fixed_map_2.pth",weights_only=True))
+    # model = DeeperValueIterationModel()
+    # model.load_state_dict(torch.load("value_function_fixed_map_2.pth",weights_only=True))
 
-    V= model(reformat_input(rewards, obstacles_map))
-    Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
-    V = V.detach().numpy().squeeze()
-    visually_compare_value_functions(V, Viter,rewards, obstacles_map)
+    # V= model(reformat_input(rewards, obstacles_map))
+    # Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
+    # V = V.detach().numpy().squeeze()
+    # visually_compare_value_functions(V, Viter,rewards, obstacles_map)
 
 
     
