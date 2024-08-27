@@ -114,6 +114,49 @@ class ValueIterationModel(torch.nn.Module):
         x = self.deconv2(x)
         x = torch.sigmoid(x)
         return x
+    
+class ValueIterationModelWithPooling(torch.nn.Module):
+    """Encoder-Decoder model for Value Iteration
+    """
+    def __init__(self):
+        super(ValueIterationModelWithPooling, self).__init__()
+        # Encoder (Downsampling)
+        self.conv1 = torch.nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1)
+        self.bn1 = torch.nn.BatchNorm2d(64)
+        self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Downsample to (64, 5, 5)
+
+        self.conv2 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.bn2 = torch.nn.BatchNorm2d(128)
+        # Use pooling only once to avoid excessive downsampling
+        # self.pool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Avoid this second downsample
+        
+        # Decoder (Upsampling)
+        self.deconv1 = torch.nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.bn3 = torch.nn.BatchNorm2d(64)
+
+        self.deconv2 = torch.nn.ConvTranspose2d(in_channels=64, out_channels=1, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.bn4 = torch.nn.BatchNorm2d(1)
+
+        self.final_conv = torch.nn.Conv2d(in_channels=1, out_channels=1, kernel_size=1, padding=0)
+    def forward(self, x):
+        # Encoder
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
+
+        x = F.relu(self.bn2(self.conv2(x)))
+        # No pooling here to avoid reducing the spatial dimensions too much
+        
+        # Decoder
+        x = F.relu(self.bn3(self.deconv1(x)))
+        x = F.relu(self.bn4(self.deconv2(x)))
+
+        # Final convolution to adjust to (1, 10, 10)
+        x = self.final_conv(x)
+
+        # Sigmoid activation to keep output between 0 and 1
+        x = torch.sigmoid(x)
+        return x
+
 
 
 class DeeperValueIterationModel(torch.nn.Module):
@@ -198,6 +241,7 @@ def train_model(dataloader, model, model_path):
                 inputs, targets = inputs.to(device), targets.to(device)
                 optimizer.zero_grad()
                 outputs = model(inputs)
+                print("model out", outputs.shape)
                 loss = criterion(outputs, targets)
                 acc_loss += loss.item()
                 loss.backward()
@@ -251,8 +295,9 @@ if __name__ == "__main__":
     dataset = ValueIterationDataset(num_samples,obstacles_map)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-    model_path = "value_function_fixed_map_2.pth"
-    train_model(dataloader,DeeperValueIterationModel(),model_path)
+    model_path = "model_weights/value_function_fixed_map_3.pth"
+    # train_model(dataloader,ValueIterationModelWithPooling(),model_path)
+    train_model(dataloader,ValueIterationModel(),model_path)
 
 
 

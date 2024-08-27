@@ -13,6 +13,7 @@ and size n as inputs
 def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
     if seed:
         np.random.seed(seed)
+        random.seed(seed)
     rewards = np.zeros((n, n))
     obstacles_map = np.zeros((n, n), dtype=bool)
 
