@@ -45,8 +45,8 @@ class GridEnvironment:
         done = self.current_position == self.target
     
         # Give a large reward if the agent reaches the target
-        if done:
-            reward += 10
+        # if done:
+        #     reward += 10
 
         reward = reward - 0.1 # Add a small negative reward for each step to encourage shorter paths
 
