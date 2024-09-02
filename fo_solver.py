@@ -38,13 +38,14 @@ def value_iteration(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
 
                 # Bellman update
                 V[i, j] = rewards[i, j] + gamma * max(v_hat, default=0)
-                delta = max(delta, abs(v - V[i, j]))
+                delta = max(delta, abs(v - V[i, j])) # This works because we are looking for max difference
         if delta < threshold:
             break
     return V
 
+
 # Function to extract the policy
-def extract_policy(V, obstacles,neighbors):
+def extract_policy(V, obstacles,neighbors,n=10):
     policy = np.zeros((n, n, 2))
 
     for i in range(n):
@@ -183,7 +184,6 @@ def visualize_rewards(rewards, obstacles, start, goal, curr_pos=None, next_pos=N
     ax.invert_yaxis()
     ax.grid(True)
     plt.show()
-
 
 if __name__ == "__main__":
     import torch

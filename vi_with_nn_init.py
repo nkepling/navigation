@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def nn_initialized_vi(model,n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
 
-    V = model(reformat_input(rewards, obstacles)).detach().numpy().squeeze()
+    V = model(reformat_input(rewards, obstacles).unsqueeze(0)).detach().numpy().squeeze()
     # Initialize the value function
     while True:
         delta = 0

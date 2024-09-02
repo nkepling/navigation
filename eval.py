@@ -11,7 +11,7 @@ import time
 from io import BytesIO
 from csv import writer 
 from vi_with_nn_init import nn_initialized_vi
-
+from collections import defaultdict
 
 def get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model):
     agent_position = deepcopy(start)
@@ -20,7 +20,7 @@ def get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model):
     checker = LiveLockChecker(last_visited={}, counter=0)
     while agent_position!=goal:
         rewards[agent_position[0], agent_position[1]] = 0
-        Vnn = model(reformat_input(rewards, obstacles_map))
+        Vnn = model(reformat_input(rewards, obstacles_map).unsqueeze(0))
         Vnn = Vnn.detach().numpy().squeeze()
         policy = extract_policy(Vnn, obstacles_map,neighbors)
         next_position = tuple(int(i) for i in policy[agent_position])
@@ -101,6 +101,7 @@ def visually_compare_value_functions(value_functions, paths, rewards, obstacles_
 
     # Plot the rewards on the second row
     ax_r = ax[1, int(num_vf / 2)]  # Center the rewards plot
+
     display_matrix = np.copy(rewards)
     display_matrix[obstacles_map] = np.nan  # Set obstacles to NaN for black color
     im_r = ax_r.imshow(display_matrix, cmap='viridis', origin='upper')
@@ -121,7 +122,8 @@ def visually_compare_value_functions(value_functions, paths, rewards, obstacles_
     # ax_r.grid(True)
     if seed is not None:
         plt.suptitle(f"Comparison of Value Functions and Paths (Seed: {seed})")
-    plt.show()
+    
+    plt.savefig(f"value_function_comparison_seed_{seed}.png")
 
 
 
@@ -381,47 +383,119 @@ def get_comparison_metrics(seeds):
 
     file.close()
 
-        
 
 
+def plot_infrence_time_versus_state_size():
+    seeds = np.random.randint(0,1000,3)
+    grid_size = [10,50,100,300,500,700,1000]
+
+    grid_times = defaultdict(list)
+    for s in tqdm(grid_size, desc="Grid Size", unit="size"):
+        for seed in tqdm(seeds, desc="Seeds", unit="seed", leave=False):
+            rewards, obstacles_map = init_map(s, config, num_blocks, num_obstacles, obstacle_type, square_size,seed=seed)
+            neighbors = precompute_next_states(s, obstacles_map)
+            start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+            
+            time_start = time.time()
+            Viter = value_iteration(s, rewards, obstacles_map, gamma,neighbors)
+            time_end = time.time()
+
+            grid_times[s].append(time_end - time_start)
+
+    grid_times = {k:np.mean(v) for k,v in grid_times.items()}
+    std_errs = {k:np.std(v)/np.sqrt(len(seeds)) for k,v in grid_times.items()}
+    plt.errorbar(grid_times.keys(), grid_times.values(), yerr=list(std_errs.values()), fmt='-o', capsize=5, capthick=2, elinewidth=1)
+    plt.xlabel("Grid Size")
+    plt.ylabel("Time (s)")
+
+    plt.show()
 
 
+def plot_change_in_value():
+
+    s = 40
+    V_prev = np.zeros((s,s))
+    seed = np.random.randint(0,1000)
+    # with open('obstacle.pkl', 'rb') as f:
+    #     obstacles_map = pickle.load(f)
+
+    rewards, obstacles_map = init_map(s, config, num_blocks, num_obstacles, obstacle_type, square_size,seed=seed)
+    neighbors = precompute_next_states(s, obstacles_map)
+    start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+    agent_position = deepcopy(start)
+    while agent_position!=goal:
+        # mark current position as 0 reward
+        rewards[agent_position[0], agent_position[1]] = 0
+        V = value_iteration(s, rewards, obstacles_map, gamma,neighbors)
+        # V = nn_initialized_vi(model,n, rewards, obstacles_map, gamma,neighbors)
+        delta_V = V - V_prev
+        # visualize_rewards(V, obstacles_map, agent_position, goal)
+        visualize_rewards(delta_V, obstacles_map, agent_position, goal)
+        V_prev = V 
+        policy = extract_policy(V, obstacles_map,neighbors,n=s)
+        next_position = tuple(int(i) for i in policy[agent_position])
+        print("Agent next state is {}".format(next_position))
+        i, j = agent_position[0], agent_position[1]
+        # visualize_rewards(rewards, obstacles_map, start, goal, agent_qposition, next_position)
+        agent_position = next_position
+
+
+#TODO add delta for V vs V model
 
 
 if __name__ == "__main__":
+    from dl_models import DeeperValueIterationModel,ValueIterationModel, UNet,UNetSmall
     with open('obstacle.pkl', 'rb') as f:
         obstacles_map = pickle.load(f)
 
     
 
-    # seeds = [74767]
+    seeds = [281,88,31415,74767,12345,3,1999]
+    # seeds = np.random.randint(0,1000,25)
+    # seeds = [31415]
 
-    # for seed in seeds:
-    #     rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
+    for seed in seeds:
+        rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
 
-    #     neighbors = precompute_next_states(n, obstacles_map)
+        neighbors = precompute_next_states(n, obstacles_map)
 
-    #     start, goal = pick_start_and_goal(rewards, obstacles_map)
+        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+        # start = (0,0)
+        # goal = (8,8)qq
 
-    #     model = DeeperValueIterationModel()
-    #     model.load_state_dict(torch.load("model_weights/value_function_fixed_map_2.pth",weights_only=True))
+        model = UNetSmall()
+        model.load_state_dict(torch.load("model_weights/unet_small_value_iteration_model_2.pth",weights_only=True))
 
-    #     # V= model(reformat_input(rewards, obstacles_map))
-    #     V_init = nn_initialized_vi(model,n, rewards, obstacles_map, gamma,neighbors)
-    #     Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
-    #     V = model(reformat_input(rewards, obstacles_map))
-    #     V = V.detach().numpy().squeeze()
+        # model = UNetSmall()
+        # model.load_state_dict(torch.load("model_weights/unet_small_value_iteration_model.pth",weights_only=True))
 
-    #     path1 = get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model)
-    #     path2 = get_vi_path(n, rewards, obstacles_map, neighbors, start, goal)
-    #     path3 = get_vi_plus_nn_path(n, rewards, obstacles_map, neighbors, start, goal,model)
-    #     vs = [V,Viter,V_init]
-    #     paths = [path1,path2,path3]
-    #     titles = ["Neural Network Approx","Value Iteration","Value Iteration + Neural Network"]
-    #     visually_compare_value_functions(vs, paths, rewards, obstacles_map, goal,titles=titles,seed=seed)
+        input = reformat_input(rewards, obstacles_map)
+        input = input.unsqueeze(0)
+        print(input.shape)
 
-    seeds = np.random.randint(0,1000,25)
-    get_comparison_metrics(seeds=seeds)
+        V= model(input).detach().numpy().squeeze()
+
+        Viter = value_iteration(n, rewards.copy(), obstacles_map, gamma,neighbors)
+        V_init = nn_initialized_vi(model,n, rewards.copy(), obstacles_map, gamma,neighbors)
+
+        path1 = get_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal, model)
+        path2 = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
+        path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)
+
+        vs = [V,Viter,V_init]
+        paths = [path1,path2,path3]
+        titles = ["Neural Network","Value Iteration","Value Iteration + Neural Network"]
+        visually_compare_value_functions(vs, paths, rewards, obstacles_map, goal,seed=seed,titles=titles)
+
+    # seeds = np.random.randint(0,1000,25)
+    # get_comparison_metrics(seeds=seeds)
+
+    # plot_change_in_value()
+
+    # rewards ,obstacles_map = init_map(10, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=31415)
+    # print(rewards)
+
+    # print(obstacles_map)
 
 
     

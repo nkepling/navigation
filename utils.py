@@ -66,6 +66,65 @@ def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square
 
     return rewards, obstacles_map
 
+def new_init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
+    if seed:
+        np.random.seed(seed)
+        random.seed(seed)
+    rewards = np.zeros((n, n))
+    obstacles_map = np.zeros((n, n), dtype=bool)
+
+    # Do the blocks firts 
+
+    if config == "block":
+        for _ in range(num_blocks):
+            # Randomly sample start_x and start_y
+            start_x = random.randrange(0, n)
+            start_y = random.randrange(0, n)
+
+            # Calculate the end coordinates, ensuring they do not go out of bounds
+            end_x = min(start_x + square_size, n)
+            end_y = min(start_y + square_size, n)
+
+            # Place positive rewards between 1 and 10 in the defined square
+            rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 100, (end_x - start_x, end_y - start_y),)
+            # rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 2, (end_x - start_x, end_y - start_y))
+
+        # Normalize rewards to sum to 1
+        total_sum = np.sum(rewards)
+        if total_sum != 0:
+            rewards = rewards / total_sum
+    
+    if obstacle_map is not None:
+        obstacles_map = obstacle_map
+
+    elif num_obstacles > 0:
+        obstacle_square_size = 4
+        if obstacle_type == "random":  # Randomly place obstacles
+            for _ in range(num_obstacles):
+                x, y = np.random.randint(0, n, size=2)
+                if rewards[x, y] != 0:  # Ensure obstacle isn't in the reward region
+                    rewards[x, y] = 0
+                obstacles_map[x, y] = True
+
+        elif obstacle_type == "block":
+            for _ in range(num_obstacles):
+                start_x = random.randrange(0, n)
+                start_y = random.randrange(0, n)
+
+                # Calculate the end coordinates, ensuring they do not go out of bounds
+                end_x = min(start_x + obstacle_square_size, n)
+                end_y = min(start_y + obstacle_square_size, n)
+
+                rewards[start_x:end_x, start_y:end_y] = 0
+                obstacles_map[start_x:end_x, start_y:end_y] = True
+    #
+    # # test blocks
+    # rewards[0, 0] = 0.01
+    # rewards[5, 0] = 0.01
+
+    return rewards, obstacles_map
+
+
 
 """
 Precompute the set of adjacent states for each state
@@ -92,13 +151,17 @@ import random
 
 # randomly pick a start and goal positions
 # Sample a target from the positive reward cells
-def pick_start_and_goal(rewards, obstacles):
+def pick_start_and_goal(rewards, obstacles,seed=None):
     # positive_reward_cells = [(i, j) for (i, j), reward in np.ndenumerate(rewards) if reward > 0]
     # target = random.choice(positive_reward_cells)
     # print(f"Target: {target}")
     # weighted sampling based on the probability of finding the target
     flat_rewards = rewards.flatten()
     total_sum = np.sum(flat_rewards)
+    
+    if seed:
+        np.random.seed(seed)
+        random.seed(seed)
 
     if total_sum == 0:
         raise ValueError("No positive rewards to sample from.")
@@ -165,9 +228,10 @@ def format_input_for_ddqn_cnn(state):
     return state
 
 
+n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
 
 if __name__ == "__main__":
-    pass
+    n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
     
     
 
