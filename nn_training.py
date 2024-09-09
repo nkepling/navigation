@@ -66,20 +66,20 @@ def generate_data(obstacle_map=None):
 
     return input, target
 
-def save_data_set(num_samples,obstacle_map=None):
+def save_data_set(num_samples,obstacle_map=None,data_dir="value_iteration_data"):
     """Create the dataset for training value iteration model 
     """
-    data_dir = 'value_iteration_data'
+
 
     # Ensure the directory exists
     os.makedirs(data_dir, exist_ok=True)
 
     # Generate and save data samples
     id = 0
+    neighbors = precompute_next_states(n,obstacle_map)
     with tqdm(total=num_samples, desc="Generating Data", unit="sample") as pbar:
         for i in range(num_samples):
             rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map)
-            neighbors = precompute_next_states(n,obstacles_map)
             input = reformat_input(rewards, obstacles_map)
             V = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
             target = reformat_output(V)
@@ -174,15 +174,14 @@ def validate(model, validation_loader, criterion1, device):
 
     return avg_loss
 
-def train_model(train_dataloader, val_dataloader, model, model_path): 
+def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs=20): 
     """Train the Value Iteration model"""
     model = model.to(device)
     criterion1 = torch.nn.MSELoss()
 
     
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer,step_size=150,gamma=0.1)
-    num_epochs = 200
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-3)
+    scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer,step_size=50,gamma=0.1)
     model.train()
     train_epoch_loss = []
     val_epoch_loss = []
@@ -190,8 +189,8 @@ def train_model(train_dataloader, val_dataloader, model, model_path):
         for epoch in range(num_epochs):
             acc_loss = 0
  
-            with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
-                for i, data in enumerate(train_loader):
+            with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
+                for i, data in enumerate(train_dataloader):
                     inputs, targets = data
                     inputs, targets = inputs.to(device), targets.to(device)
                     optimizer.zero_grad()
@@ -256,23 +255,27 @@ if __name__ == "__main__":
     from dl_models import UNetSmall
     from utils import *
     import pickle
+    from dl_models import *
+
+    with open("obstacle.pkl","rb") as f:
+        obstacle_map = pickle.load(f)
+
+    # save_data_set(500000,obstacle_map,data_dir="fixed_value_iteration_data")
 
     # data = ValueIterationDataset(num_samples=num_samples)
-    train_ind,val = torch.utils.data.random_split(range(100000),[80000,20000])
+    train_ind,val = torch.utils.data.random_split(range(500000),[400000,100000])
 
-    train_data = SavedData(data_dir="value_iteration_data",indeces=train_ind)
-    val_data = SavedData(data_dir="value_iteration_data",indeces=val)
+    train_data = SavedData(data_dir="fixed_value_iteration_data",indeces=train_ind)
+    val_data = SavedData(data_dir="fixed_value_iteration_data",indeces=val)
 
     train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=32, shuffle=True)
     
+    # model = UNetSmall()
     model = UNetSmall()
-    model_path = "model_weights/unet_small_value_iteration_model_3.pth"
+    model_path = "model_weights/unet_small_5.pth"
 
-    train_model(train_loader,val_loader, model, model_path)
-
-
-
+    train_model(train_loader,val_loader, model, model_path,num_epochs=100)
 
 
 
