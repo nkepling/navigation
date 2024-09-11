@@ -381,10 +381,7 @@ class UNetSmallWithCBAM(torch.nn.Module):
 
 if __name__ == "__main__":
     model = UNetSmall()
-    model = DeeperValueIterationModel()
-    x = torch.randn(1,2,10,10)
-    y = model(x)
-    print(y.shape)
+
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")

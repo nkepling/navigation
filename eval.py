@@ -12,6 +12,8 @@ from io import BytesIO
 from csv import writer 
 from vi_with_nn_init import nn_initialized_vi
 from collections import defaultdict
+from dl_models import UNetSmall
+
 
 def get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model):
     agent_position = deepcopy(start)
@@ -36,9 +38,11 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
     agent_position = deepcopy(start)
     steps = 0
     path = [agent_position]
+    reward_list = []
     checker = LiveLockChecker(last_visited={}, counter=0)
     while agent_position!=goal:
         rewards[agent_position[0], agent_position[1]] = 0
+
         Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
         policy = extract_policy(Viter, obstacles_map,neighbors)
         next_position = tuple(int(i) for i in policy[agent_position])
@@ -47,6 +51,7 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
             break
         agent_position = next_position
         path.append(agent_position)
+        reward_list.append(rewards)
         steps += 1
     return path
 
@@ -68,6 +73,44 @@ def get_vi_plus_nn_path(n, rewards, obstacles_map, neighbors, start, goal,model)
         path.append(agent_position)
         steps += 1
     return path
+
+# def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
+#     agent_pos = deepcopy(start)
+#     checker = LiveLockChecker(counter=0,last_visited={})
+#     model = UNetSmall()
+#     model.load_state_dict(torch.load("model_weights/unet_small_5.pth",weights_only=True))
+#     model.eval()
+#     path = [agent_pos]
+#     while agent_pos != goal:
+#         input = reformat_input(rewards, obstacle_maps)
+#         input = input.unsqueeze(0)
+#         V= model(input).detach().numpy().squeeze()
+#         policy = extract_policy(V,obstacle_map,neighbors,10)
+#         next_pos = tuple(int(i) for i in policy[agent_pos])
+
+#         checker.update(agent_pos,next_pos)
+#         if checker.check(agent_pos,next_pos):
+#             print("Live Lock Detected")
+#             path = center_of_mass_heuristc(obstacle_map,rewards,agent_pos)
+#             i = 1
+#             while rewards[agent_pos] == 0:
+#                 next_pos = path[i]
+#                 visualize_rewards(rewards,obstacle_map,start,goal,agent_pos,next_pos)
+#                 agent_pos = next_pos
+#                 path.append(agent_pos)
+#                 i+=1
+                
+#             # next_pos = path[1]
+#             # visualize_rewards(rewards,obstacle_map,start,goal,agent_pos,next_pos)
+#             # agent_pos = next_pos
+
+#             rewards[agent_pos] = 0
+#         else:
+#             visualize_rewards(rewards, obstacle_map, start, goal, agent_pos, next_pos)
+#             agent_pos = next_pos
+#             path.append(agent_pos)
+#             rewards[agent_pos] = 0
+#     return path
 
 def visually_compare_value_functions(value_functions, paths, rewards, obstacles_map, target_location, titles=None,seed=None):
     num_vf = len(value_functions)
@@ -126,52 +169,34 @@ def visually_compare_value_functions(value_functions, paths, rewards, obstacles_
     # plt.savefig(f"value_function_comparison_seed_{seed}.png")
     plt.show()
 
+def compare_paths(paths, rewards, obstacles_map, target_location,seed=None):
+    num_paths = len(paths)
+    fig, ax = plt.subplots(1, num_paths, figsize=(14, 10))  # Adjust figure size based on number of value functions
 
+    for i in range(num_paths):
+        ax_i = ax[i] if num_paths > 1 else ax  # Handle single plot case
+        display_matrix = np.copy(rewards)
+        display_matrix[obstacles_map] = np.nan  # Set obstacles to NaN for black color
 
-# def visually_compare_value_functions(V1, V2,path1,path2,rewards,obstacles_map,target_location,v1name="Value Function 1",v2name="Value Function 2"):
-#     fig, ax = plt.subplots(1, 3,figsize=(14, 10)) 
-#     ax1,ax2,ax3 = ax
-#     display_matrix = np.copy(V1)
+        im = ax_i.imshow(display_matrix, cmap='viridis', origin='upper')
+        ax_i.plot(target_location[1], target_location[0], 'ro')
+        ax_i.plot(0, 0, 'wo')
 
-#     vmin = min(np.min(V1),np.min(V2))
-#     vmax = max(np.max(V1),np.max(V2))
-#     #display_matrix[obstacles_map] = np.nan  # Set obstacles to NaN for black color
-#     im1 = ax1.imshow(display_matrix,vmin=vmin,vmax=vmax, cmap='viridis', origin='upper')
-#     ax1.plot(target_location[1], target_location[0], 'ro')
-#     ax1.plot(0,0,'wo')
-#     for i in range(len(path1) - 1):
-#         ax1.annotate('', xy=(path1[i+1][1], path1[i+1][0]), xytext=(path1[i][1], path1[i][0]),
-#                     arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->'))
-#     ax1.set_title(v1name)
-#     fig.colorbar(im1, ax=ax1)
-#     display_matrix = np.copy(V2)
-#     #display_matrix[obstacles_map] = np.nan  # Set obstacles to NaN for black color
-#     im2 = ax2.imshow(display_matrix, vmin=vmin,vmax=vmax , cmap='viridis', origin='upper')
-#     ax2.plot(target_location[1], target_location[0], 'ro')
-#     ax2.plot(0,0,'wo')
-#     for i in range(len(path2) - 1):
-#         ax2.annotate('', xy=(path2[i+1][1], path2[i+1][0]), xytext=(path2[i][1], path2[i][0]),
-#                      arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->'))
-#     ax2.set_title(v2name)
-#     fig.colorbar(im2, ax=ax2)
+        path = paths[i]
+        for j in range(len(path) - 1):
+            ax_i.annotate('', xy=(path[j+1][1], path[j+1][0]), xytext=(path[j][1], path[j][0]),
+                          arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->'))
+        ax_i.set_title(f"Path {i + 1}")
+        # fig.colorbar(im, ax=ax_i)
 
+        ax_i.invert_yaxis()
+        ax_i.grid(True)
 
-#     display_matrix = np.copy(rewards)
-#     display_matrix[obstacles_map] = np.nan  # Set obstacles to NaN for black color
-#     im3 = ax3.imshow(display_matrix, cmap='viridis', origin='upper')
-#     ax3.plot(target_location[1], target_location[0], 'ro')
-#     ax3.plot(0,0,'wo')
-#     ax3.set_title("Ground Truth Rewards")
-#     fig.colorbar(im3, ax=ax3)
-    
-#     ax1.invert_yaxis()
-#     ax1.grid(True)
-#     ax2.invert_yaxis()
-#     ax2.grid(True)
-#     ax3.invert_yaxis()
-#     ax3.grid(True)
+    fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.025, pad=0.04)
+    if seed is not None:
+        plt.suptitle(f"Comparison of Paths (Seed: {seed})")
+    plt.show()
 
-#     plt.show()
 
 
 def visually_compare_policy(V1,V2,rewards,obstacle_map,neighbors,v1name="Value Function 1",v2name="Value Function 2"):
@@ -481,8 +506,6 @@ if __name__ == "__main__":
     with open('obstacle.pkl', 'rb') as f:
         obstacles_map = pickle.load(f)
 
-    plot_optimal_policies()
-
     # seeds = [281,88,31415,74767,12345,3,1999]
     seeds = np.random.randint(0,1000,25)
 
@@ -519,6 +542,34 @@ if __name__ == "__main__":
     #     paths = [path1,path2,path3]
     #     titles = ["Neural Network","Value Iteration","Value Iteration + Neural Network"]
     #     visually_compare_value_functions(vs, paths, rewards, obstacles_map, goal,seed=seed,titles=titles)
+
+
+    for seed in seeds:
+        rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
+        neighbors = precompute_next_states(n, obstacles_map)
+        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+        model = UNetSmall()
+        model.load_state_dict(torch.load("model_weights/unet_small_5.pth",weights_only=True))
+        input = reformat_input(rewards, obstacles_map)
+        input = input.unsqueeze(0)
+        print(input.shape)
+
+        V= model(input).detach().numpy().squeeze()
+
+        Viter = value_iteration(n, rewards.copy(), obstacles_map, gamma,neighbors)
+        V_init = nn_initialized_vi(model,n, rewards.copy(), obstacles_map, gamma,neighbors)
+
+        path1 = get_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal, model)
+        path2 = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
+        path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)
+        path4 = get_heuristic_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
+
+        paths = [path1,path2,path3,path4]
+
+        compare_paths(paths, rewards, obstacles_map, goal,seed=seed)
+
+  
+
 
 
 
