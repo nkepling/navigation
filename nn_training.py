@@ -181,7 +181,6 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs=2
 
     
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-3)
-    scheduler = optim.lr_scheduler.StepLR(optimizer=optimizer,step_size=50,gamma=0.1)
     model.train()
     train_epoch_loss = []
     val_epoch_loss = []
@@ -200,7 +199,6 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs=2
                     acc_loss += loss.item()
                     loss.backward()
                     optimizer.step()
-                    scheduler.step()
                     pbar.set_postfix(loss=loss.item())
                     pbar.update(1)
 
@@ -216,13 +214,13 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs=2
     plt.xlabel("Epoch") 
     plt.ylabel("Loss")
     plt.title("Training Loss")
-    plt.show()
+    plt.savefig("train_loss.png")
 
     plt.plot([i for i in range(num_epochs)], val_epoch_loss)    
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Validation Loss")
-    plt.show()
+    plt.savefig("val_loss.png")
 
 
 
@@ -268,12 +266,13 @@ if __name__ == "__main__":
 
     # 80 , 10, 10 training split
 
-    num_samples = 857898
-    num_train_samples = np.round(0.8 * num_samples)
-    num_test_samples = num_samples - num_train_samples//2
-    num_val_samples = num_samples - num_train_samples  - num_test_samples
+    num_samples = 857898 - 1
+    num_train_samples = int(np.round(0.8 * num_samples))
+    num_test_samples = int((num_samples - num_train_samples)//2)
+    num_val_samples = int(num_samples - num_train_samples  - num_test_samples)
+    assert(num_test_samples+num_train_samples+num_val_samples==num_samples)
 
-    data_dir= "training_data/training_data_with_reward_updates/training_data_with_reward_updates"
+    data_dir= "training_data/training_data_with_reward_updates"
    
     train_ind,test_ind,val_ind = torch.utils.data.random_split(range(num_samples),[num_train_samples,num_test_samples,num_val_samples])
 
@@ -287,9 +286,11 @@ if __name__ == "__main__":
     
     # model = UNetSmall()
     model = UNetSmall()
-    model_path = "model_weights/unet_small_6.pth"
+    model_path = "model_weights/unet_small_5.pth"
 
-    train_model(train_loader,val_loader, model, model_path,num_epochs=100)
+    # train_model(train_loader,val_loader, model, model_path,num_epochs=100)
+
+    print(eval_model(test_loader,model=model, model_path=model_path))
 
 
 
