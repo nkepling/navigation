@@ -169,8 +169,9 @@ graph_data/
 value_itaration_data/
 vin_data/
 fixed_value_iteration_data/
-
+images/
+training_data/
 .DS_Store
 
 
-*.png
+*.packaging
