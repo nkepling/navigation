@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import *
-import heuristics
 from heuristics import *
 from nn_training import *
 from fo_solver import *
@@ -9,6 +8,7 @@ import pickle
 import torch
 from eval import *
 from dl_models import *
+from get_training_data import * 
 
 
 # def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
@@ -51,11 +51,63 @@ from dl_models import *
 #         # path.append(agent_pos)
 #     return path
 
+
+
+
+def get_p_net_path(cae_net,cae_net_path, pnet,pnet_path,obstacles_map,rewards,start,goal):
+
+    action_map = {0:(-1,0),
+                  1:(0,1),
+                  2:(1,0),
+                  3:(0,-1)}
+
+    agent_pos = deepcopy(start)
+    checker = LiveLockChecker(counter=0,last_visited={})
+    pathlist = []
+    pathlist.append(agent_pos)
+    
+    cae_net.load_state_dict(torch.load(cae_net_path,weights_only=True))
+    pnet.load_state_dict(torch.load(pnet_path,weights_only=True))
+    max_step = 50
+    step = 0
+    while agent_pos!= goal and step<max_step:
+        input = reformat_input_for_mpnet(obstacles_map,rewards)
+        _,latent = cae_net(input.float())
+        
+        coord = torch.tensor(agent_pos).unsqueeze(0)
+        action_logits = pnet(coord,latent)
+
+        action = torch.argmax(action_logits,dim=1).item()
+
+
+        dir = action_map[action]
+
+        next_pos = (agent_pos[0] + dir[0],agent_pos[1]+dir[1])
+
+        checker.update(agent_pos,next_pos)
+        if checker.check(agent_pos,next_pos):
+            print("Live lock detected")
+            return pathlist
+
+        agent_pos = next_pos
+        
+        pathlist.append(agent_pos)
+        step+=1
+    
+    return pathlist
+
+    
+
+
+
+
+
+
 def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
     agent_pos = deepcopy(start)
     checker = LiveLockChecker(counter=0, last_visited={})
     model = UNetSmall()
-    model.load_state_dict(torch.load("model_weights/unet_small_5.pth", weights_only=True))
+    model.load_state_dict(torch.load("model_weights/unet_small_7.pth", weights_only=True))
     model.eval()
     pathlist = []
     pathlist.append(agent_pos)
@@ -119,7 +171,7 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
         plt.suptitle(f"Comparison of Paths (Seed: {seed})")
 
 
-    plt.savefig(f"{seed}"+"path_comparison_final.png", format='png')  # Save the figure as a PNG file
+    plt.savefig("images/" + f"{seed}"+"path_comparison_final.png", format='png')  # Save the figure as a PNG file
     plt.show()
 
 
@@ -130,12 +182,20 @@ if __name__ == "__main__":
     seeds = np.random.randint(0,1000,10)
     with open('obstacle.pkl', 'rb') as f:
         obstacles_map = pickle.load(f)
+
+
+    pnet = PNetResNet(2,128,128,5)
+    pnet_path = "model_weights/pnet_resnet_1.pth"
+
+    cae_net = ContractiveAutoEncoder()
+    cae_net_path = "model_weights/CAE_1.pth"
+
     for seed in seeds:
         rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
         neighbors = precompute_next_states(n, obstacles_map)
         start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
         model = UNetSmall()
-        model.load_state_dict(torch.load("model_weights/unet_small_5.pth",weights_only=True))
+        model.load_state_dict(torch.load("model_weights/unet_small_7.pth",weights_only=True))
         input = reformat_input(rewards, obstacles_map)
         input = input.unsqueeze(0)
         print(input.shape)
@@ -149,8 +209,9 @@ if __name__ == "__main__":
         path2 = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
         path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)
         path4 = get_heuristic_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
-        print(path4)
-        paths = [path1,path2,path3,path4]
-        titles = ["NN", "VI", "VI + NN", "Heuristic + NN"]
+        path5 = get_p_net_path(cae_net,cae_net_path,pnet,pnet_path,obstacles_map,rewards,start,goal)
+
+        paths = [path1,path2,path3,path4,path5]
+        titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET"]
 
         compare_paths(paths, rewards, obstacles_map, goal,seed=seed,titles=titles)

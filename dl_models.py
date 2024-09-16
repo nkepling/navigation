@@ -377,15 +377,229 @@ class UNetSmallWithCBAM(torch.nn.Module):
         out = self.out(layer_9_out)  # 16, 10, 10 -> 1, 10, 10
 
         return out
+    
+class CAE_Loss(torch.nn.Module):
+    def __init__(self, beta) -> None:
+        super(CAE_Loss, self).__init__()
+        self.l1 = torch.nn.MSELoss()  # MSELoss for reconstruction
+        self.beta = beta  # Regularization strength
+
+    def forward(self, x, recon_x, latent):
+        # 1. Reconstruction loss (MSE)
+
+        reconstruction_loss = self.l1(recon_x, x)
+        
+        # 2. Contractive loss: Regularization term
+        # Compute the Jacobian of the latent representation with respect to the input
+        latent_grads = torch.autograd.grad(outputs=latent, inputs=x, 
+                                           grad_outputs=torch.ones_like(latent),
+                                           create_graph=True, retain_graph=True)[0]
+        # Frobenius norm (L2 norm) of the Jacobian
+        contractive_loss = torch.sum(latent_grads ** 2)
+        
+        # Total loss
+        total_loss = reconstruction_loss + self.beta * contractive_loss
+        
+        return total_loss
+
+class ContractiveAutoEncoder(nn.Module):
+    def __init__(self):
+        super(ContractiveAutoEncoder, self).__init__()
+        
+        # Encoder: progressively downsample input (10x10 -> latent space)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1),  # Output: (16, 10, 10)
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),  # Output: (32, 5, 5)
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),  # Output: (64, 3, 3)
+            nn.ReLU(),
+            nn.Flatten(),  # Flatten for latent space representation
+            nn.Linear(64 * 3 * 3, 128)  # Latent space (128-dimensional)
+        )
+        
+        # Decoder: progressively upsample from latent space (latent -> 10x10)
+        self.decoder = nn.Sequential(
+            nn.Linear(128, 64 * 3 * 3),  # Map latent vector to feature map (64, 3, 3)
+            nn.Unflatten(1, (64, 3, 3)),
+            
+            # Upsample (64, 3, 3) -> (32, 5, 5)
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=0),  # (32, 5, 5)
+            nn.ReLU(),
+            
+            # Upsample (32, 5, 5) -> (16, 10, 10)
+            nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),  # (16, 10, 10)
+            nn.ReLU(),
+            
+            # Final upsampling to match original size (1, 10, 10)
+            nn.ConvTranspose2d(16, 1, kernel_size=3, stride=1, padding=1)  # (1, 10, 10)
+        )
+
+    def forward(self, x):
+        latent = self.encoder(x)
+        recon = self.decoder(latent)
+        return recon, latent
+
+
+
+
+class PNet(nn.Module):
+    def __init__(self, coord_dim, latent_dim, hidden_dim, dropout_rate=0.5):
+        """
+        Args:
+            coord_dim (int): Dimensionality of the agent's coordinates (usually 2 for (x, y)).
+            latent_dim (int): Dimensionality of the latent representation from the encoder.
+            hidden_dim (int): Dimensionality of the hidden layers.
+            dropout_rate (float): Dropout rate (fraction of neurons to drop).
+        """
+        super(PNet, self).__init__()
+
+        # Fully connected layers with additional hidden layers
+        self.fc1 = nn.Linear(coord_dim + latent_dim, hidden_dim)  # First layer: coordinates + latent representation
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)  # Hidden layer
+        self.fc3 = nn.Linear(hidden_dim, hidden_dim)  # Another hidden layer
+        self.fc4 = nn.Linear(hidden_dim, hidden_dim)  # Another hidden layer
+        self.fc5 = nn.Linear(hidden_dim, 4)  # Final layer: outputs logits for 4 actions
+
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout_rate)  # Dropout with the given rate
+
+    def forward(self, coords, latent):
+        """
+        Forward pass through the network.
+        
+        Args:
+            coords (Tensor): Tensor containing the agent's coordinates (batch_size, coord_dim).
+            latent (Tensor): Tensor containing the latent representation (batch_size, latent_dim).
+        
+        Returns:
+            Tensor: Logits for 4 possible actions.
+        """
+        # Concatenate the coordinates and latent representation
+        coords = coords.view(coords.size(0), -1)
+        x = torch.cat((coords, latent), dim=1)
+
+        # Pass through the fully connected layers with ReLU activations and apply dropout
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)  # Apply dropout
+
+        x = F.relu(self.fc2(x))
+        x = self.dropout(x)  # Apply dropout
+
+        x = F.relu(self.fc3(x))
+        x = self.dropout(x)  # Apply dropout
+
+        x = F.relu(self.fc4(x))
+
+        # Output layer: Logits for the 4 possible actions
+        action_logits = self.fc5(x)
+        
+        return action_logits
+
+class ResidualBlock(nn.Module):
+    def __init__(self, hidden_dim, dropout_rate=0.5):
+        """
+        Residual block with two fully connected layers and a skip connection.
+        Args:
+            hidden_dim (int): Dimensionality of the hidden layers.
+            dropout_rate (float): Dropout rate.
+        """
+        super(ResidualBlock, self).__init__()
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, x):
+        """
+        Forward pass with a residual connection.
+        Args:
+            x (Tensor): Input tensor.
+        Returns:
+            Tensor: Output with residual connection applied.
+        """
+        identity = x  # Store input for skip connection
+
+        # First layer with ReLU and dropout
+        out = F.relu(self.fc1(x))
+        out = self.dropout(out)
+
+        # Second layer with ReLU and dropout
+        out = F.relu(self.fc2(out))
+        out = self.dropout(out)
+
+        # Add skip connection: out + identity (residual connection)
+        out += identity
+        return out
+
+
+class PNetResNet(nn.Module):
+    def __init__(self, coord_dim, latent_dim, hidden_dim, num_blocks=3, dropout_rate=0.5):
+        """
+        PNet model with ResNet-style residual blocks.
+        Args:
+            coord_dim (int): Dimensionality of the agent's coordinates (usually 2 for (x, y)).
+            latent_dim (int): Dimensionality of the latent representation from the encoder.
+            hidden_dim (int): Dimensionality of the hidden layers.
+            num_blocks (int): Number of residual blocks.
+            dropout_rate (float): Dropout rate.
+        """
+        super(PNetResNet, self).__init__()
+
+        # Initial fully connected layer
+        input_dim = coord_dim + latent_dim
+        self.input_layer = nn.Linear(input_dim, hidden_dim)
+
+        # Residual blocks (stacked)
+        self.residual_blocks = nn.ModuleList([ResidualBlock(hidden_dim, dropout_rate) for _ in range(num_blocks)])
+
+        # Output layer: logits for 4 possible actions
+        self.output_layer = nn.Linear(hidden_dim, 4)
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, coords, latent):
+        """
+        Forward pass through the network.
+        Args:
+            coords (Tensor): Tensor containing the agent's coordinates (batch_size, coord_dim).
+            latent (Tensor): Tensor containing the latent representation (batch_size, latent_dim).
+        Returns:
+            Tensor: Logits for 4 possible actions.
+        """
+        # Concatenate the coordinates and latent representation
+        coords = coords.view(coords.size(0), -1)
+        x = torch.cat((coords, latent), dim=1)
+
+        # Pass through the input layer
+        x = F.relu(self.input_layer(x))
+        x = self.dropout(x)
+
+        # Pass through the residual blocks
+        for block in self.residual_blocks:
+            x = block(x)  # Apply each residual block
+
+        # Final output layer (logits for the 4 possible actions)
+        action_logits = self.output_layer(x)
+        return action_logits
+
 
 
 if __name__ == "__main__":
-    model = UNetSmall()
+    # model = PNet(coord_dim=2, latent_dim=128, hidden_dim=128, dropout_rate=0.5)
+    model = PNetResNet(2,128,128,32)
 
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
 
+    # x = torch.randn(size = (1,1,10,10))
+
+    # coords = torch.randn(32, 2)  # Batch size 32, 2D coordinates (x, y)
+    # latent = torch.randn(32, 128)  # Batch size 32, latent dimension from encoder
+
+    # # recon,latent = model(x)
+
+    # action_logits = model(coords,latent)
+    
 
 
 

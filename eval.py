@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import pickle
 import torch
 from dataclasses import dataclass
-import pandas as pd
 import time 
 from io import BytesIO
 from csv import writer 

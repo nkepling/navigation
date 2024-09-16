@@ -153,8 +153,7 @@ def calculate_potential_field(obstacle_map, distances, mass_map, influence_facto
 
 
     
-
-def heuristic_search():
+def pnet_replanner(pnet_path,obstacle_map):
     pass
 
 
