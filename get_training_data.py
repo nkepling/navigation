@@ -8,7 +8,7 @@ from nn_training import reformat_input,reformat_output
 from tqdm import tqdm
 import torch
 
-total_init_dists = 80000 # number fo init distributions
+total_init_dists = 100000 # number fo init distributions
 seeds = np.arange(1,total_init_dists+1)
 
 # np.random.shuffle(seeds)
@@ -40,12 +40,8 @@ def get_action_map(agent_pos, next_pos):
     return torch.tensor(agent_pos).unsqueeze(0), action_map[action]
 
 
-    
-
-
-
-def save_mpnet_style_data(id,input,coords,action,save_dir):
-    torch.save((input,coords,action),os.path.join(save_dir,f"map_{id}.pt"))
+def save_mpnet_style_data(id,input,coords,action,V,save_dir):
+    torch.save((input,coords,action,V),os.path.join(save_dir,f"map_{id}.pt"))
 
 
 def save_images(id,input,label,save_dir):
@@ -121,7 +117,7 @@ def auto_encoder_training_data(obstacle_map,save_dir,seeds):
         input = reformat_input_for_mpnet(obstacle_map,reward)
         coords, action = get_action_map(agent_pos,next_pos)
 
-        save_mpnet_style_data(id,input,coords, action,save_dir)
+        save_mpnet_style_data(id,input,coords, action,torch.tensor(V),save_dir)
 
         id+=1
         agent_pos = next_pos
@@ -131,7 +127,7 @@ def auto_encoder_training_data(obstacle_map,save_dir,seeds):
         steps = 0
 
 
-        while agent_pos != goal and steps < max_steps:
+        while np.any(reward > 0) and steps < max_steps:
             reward[agent_pos[0],agent_pos[1]] = 0
             V = value_iteration(n,rewards=reward, obstacles=obstacle_map,neighbors=neighbors,gamma=gamma)
 
@@ -140,7 +136,7 @@ def auto_encoder_training_data(obstacle_map,save_dir,seeds):
 
             input = reformat_input_for_mpnet(obstacle_map,reward)
             coords, action = get_action_map(agent_pos,next_pos)
-            save_mpnet_style_data(id,input,coords,action,save_dir)
+            save_mpnet_style_data(id,input,coords,action,torch.tensor(V),save_dir)
 
             id+=1
             agent_pos = next_pos
@@ -167,5 +163,5 @@ if __name__ == "__main__":
         obstacle_map = pickle.load(f)
 
 
-    save_dir = "training_data/auto_encoder_data"
+    save_dir = "training_data/auto_encoder_full_paths_data_with_values"
     main(obstacle_map,save_dir,seeds)

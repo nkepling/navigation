@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 
+
+# ensure_initialized()
 # NOTE: You have to from utils import * in order to run this code. In the utils file I set the map + value iteration configs. 
 
 if torch.cuda.is_available():
@@ -130,7 +132,7 @@ class SavedData(Dataset):
 
     def __getitem__(self, idx):
         id = self.indeces[idx]
-        input, target = torch.load(os.path.join(self.data_dir, f"map_{id}.pt"))
+        input, target = torch.load(os.path.join(self.data_dir, f"map_{id}.pt"),weights_only=True)
         return input, target
 
 
@@ -178,9 +180,15 @@ class AutoEncoderDataset(Dataset):
         file_path = os.path.join(self.data_dir, f"map_{id}.pt")
         
         # Load the input, coordinates, and action from the .pt file
-        input, coords, action = torch.load(file_path)
+        input, coords, action,V = torch.load(file_path,weights_only=True)
         input = input.squeeze(1)
-        return input.float(), coords.float(), action
+
+        V = V.view(1,10,10)
+
+        
+        
+        assert input.shape == V.shape,(f"Got input shape {input.shape} and v shape {V.shape}")
+        return input.float(), coords.float(), action, V.float()
 
 class EarlyStopping:
     def __init__(self, patience=10, delta=0.001, warmup_epochs=10, path='best_model.pth'):
@@ -212,7 +220,7 @@ class EarlyStopping:
 
     def save_checkpoint(self, model):
         '''Save the model when validation loss improves.'''
-        torch.save(model.state_dict(), self.path)
+        torch.save(model.state_dict(),"model_weights/" + self.path+".pth")
         print(f"Model saved at epoch with validation loss: {self.best_loss:.4f}")
 
 
@@ -224,8 +232,8 @@ def validate(model, validation_loader, criterion1, device):
     
     with torch.no_grad():  # Ensure no gradients are computed
         for data in validation_loader:
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
+            inputs, coords, action,V = data
+            inputs, labels = inputs.to(device), V.to(device)
 
             # Forward pass
             outputs = model(inputs)
@@ -242,54 +250,71 @@ def validate(model, validation_loader, criterion1, device):
 
     return avg_loss
 
-def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs=20): 
+def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,criterion,delta): 
     """Train the Value Iteration model"""
     model = model.to(device)
     # criterion1 = torch.nn.MSELoss()
-    criterion1 = torch.nn.L1Loss()
 
     
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-3)
     model.train()
     train_epoch_loss = []
-    val_epoch_loss = []
+    val_loss = []
+    
+    early_stopper = EarlyStopping(patience=10,delta=delta,warmup_epochs=15,path=model_path)
+
     with tqdm(total=num_epochs, desc="Training", unit="epoch") as pbar0:
         for epoch in range(num_epochs):
             acc_loss = 0
  
             with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
                 for i, data in enumerate(train_dataloader):
-                    inputs, targets = data
-                    inputs, targets = inputs.to(device), targets.to(device)
+                    inputs, coords,action,V = data
+                    inputs, V = inputs.float().to(device), V.float().to(device)
+
+
+
                     optimizer.zero_grad()
                     outputs = model(inputs)
-                    l1 = criterion1(outputs, targets)
-                    loss = l1 
+                    loss = criterion(outputs, V)
                     acc_loss += loss.item()
                     loss.backward()
                     optimizer.step()
                     pbar.set_postfix(loss=loss.item())
                     pbar.update(1)
 
-            pbar0.update(1)
+
             train_epoch_loss.append(acc_loss / len(train_dataloader))
-            val_loss = validate(model, val_dataloader, criterion1, device)
-            val_epoch_loss.append(val_loss)
-            pbar0.set_postfix_str(f"Epoch Loss: {train_epoch_loss[-1]}, Validation Loss: {val_loss}")
+            v_loss = validate(model, val_dataloader, criterion, device)
+            val_loss.append(v_loss)
+
+            pbar0.set_postfix(v_loss=v_loss)
+            pbar0.update(1)
+
+            if epoch%10==0:
+                path = "model_weights/" + f"{model_path}_{epoch}.pth"
+                torch.save(model.state_dict(), path)
+
+            early_stopper(epoch,v_loss,model)
+            if early_stopper.early_stop:
+                print("Early stop at epoch: ",epoch)
+                break
 
     torch.save(model.state_dict(), model_path)
 
-    plt.plot([i for i in range(num_epochs)], train_epoch_loss)
+    plt.plot([i for i in range(len(train_epoch_loss))], train_epoch_loss)
     plt.xlabel("Epoch") 
     plt.ylabel("Loss")
     plt.title("AE Training Loss")
-    plt.savefig("train_loss.png")
+    plt.savefig("images/"+model_path+"train_loss.png")
 
-    plt.plot([i for i in range(num_epochs)], val_epoch_loss)    
+    plt.plot([i for i in range(len(val_loss))], val_loss)    
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Validation Loss")
-    plt.savefig("AE val_loss.png")
+    plt.savefig("images/"+model_path+"val_loss.png")
+
+    print("DONE!!!")
 
 
 
@@ -354,7 +379,7 @@ def train_auto_encoder(train_dataloader,val_dataloader, model,model_path,num_epo
                 acc_loss = 0 
                 with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
                     for i, data in enumerate(train_dataloader):
-                        inputs, coords,action = data
+                        inputs, coords,action,V = data
 
                         inputs  =  inputs.to(device)
                         inputs.requires_grad_(True)
@@ -611,6 +636,14 @@ def train_pnet(train_dataloader, val_dataloader, pnet_model, CAE_model, CAE_mode
 
 
 
+def dagger(expert_policy,expert_data_set,model,num_iters):
+    """Data Aggregation for imiation learning
+
+    NOTE: This looks like it will be computationally expensive. 
+    """
+
+    for _ in range(num_iters):
+        pass
 
 
 
@@ -623,10 +656,12 @@ if __name__ == "__main__":
     # import pickle
     # from dl_models import *
 
-    # with open("obstacle.pkl","rb") as f:
-    #     obstacle_map = pickle.load(f)
 
-    # data_dir= "training_data/auto_encoder_data"
+
+
+ 
+
+
 
     # dataset_size =len([os.path.join(data_dir, img) for img in os.listdir(data_dir) if img.endswith(('pt'))])
 
@@ -636,49 +671,49 @@ if __name__ == "__main__":
    
     # train_ind,test_ind,val_ind = torch.utils.data.random_split(range(dataset_size),[train_size,test_size,val_size])
 
-    # train_data = AutoEncoderDataset(data_dir,train_ind)
-    # val_data = AutoEncoderDataset(data_dir,val_ind)
-    # test_data = AutoEncoderDataset(data_dir,test_ind)
+    # train_data = AutoEncoderDataset(data_dir,train_ind,num_workers=4,pin_memory=True)
+    # val_data = AutoEncoderDataset(data_dir,val_ind,num_workers=4,pin_memory=True)
+    # test_data = AutoEncoderDataset(data_dir,test_ind,num_workers=4,pin_memory=True)
 
     # train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
     # val_loader = DataLoader(val_data, batch_size=64, shuffle=True)
     # test_loader = DataLoader(test_data,batch_size=1,shuffle=True)
     
+    # # # model = UNetSmall()
     # # model = UNetSmall()
-    # model = UNetSmall()
-    # model_path = "model_weights/unet_small_7.pth"
+    # # model_path = "model_weights/unet_small_7.pth"
 
-    # train_model(train_loader,val_loader, model, model_path,num_epochs=80)
+    # # train_model(train_loader,val_loader, model, model_path,num_epochs=80)
 
-    # # print(eval_model(test_loader,model=model, model_path=model_path))
+    # # # print(eval_model(test_loader,model=model, model_path=model_path))
 
     # cae_model = ContractiveAutoEncoder()
     # model_path = "model_weights/CAE_1.pth"
-    # # criterion = CAE_Loss(beta=1e-4)
+    # # # criterion = CAE_Loss(beta=1e-4)
 
-    #  # Adjust lr based on your needs
+    # #  # Adjust lr based on your needs
 
-    # # pnet_model = PNet(2,latent_dim=128,hidden_dim=128)
-    # # pnet_model_path = "model_weights/pnet_1.pth"
-    # pnet_model = PNetResNet(coord_dim=2,latent_dim=128,hidden_dim=128,num_blocks=5)
-    # pnet_model_path = "model_weights/pnet_resnet_1.pth"
-    # optimizer = torch.optim.Adam(pnet_model.parameters(), lr=1e-4)
+    # # # pnet_model = PNet(2,latent_dim=128,hidden_dim=128)
+    # # # pnet_model_path = "model_weights/pnet_1.pth"
+    # pnet_model = PNetResNet(coord_dim=2,latent_dim=128,hidden_dim=128,num_blocks=8) # the other has 5 blocks
+    # pnet_model_path = "model_weights/pnet_resnet_2.pth"
+    # # optimizer = torch.optim.Adam(pnet_model.parameters(), lr=1e-4)
 
-    # criterion = torch.nn.CrossEntropyLoss()
+    # # criterion = torch.nn.CrossEntropyLoss()
     
-    #train_pnet(train_loader,val_loader,pnet_model,cae_model,model_path,pnet_model_path,num_epochs=100,criterion=criterion,optimizer=optimizer)
+    # #train_pnet(train_loader,val_loader,pnet_model,cae_model,model_path,pnet_model_path,num_epochs=100,criterion=criterion,optimizer=optimizer)
     
 
-    # train_auto_encoder(train_dataloader=train_loader,
-    #                    val_dataloader=val_loader,
-    #                    model=model,
-    #                    model_path=model_path,
-    #                    num_epochs=100,
-    #                    criterion=criterion,
-    #                    optimizer=optimizer)
-    # model.load_state_dict(torch.load(model_path,weights_only=True))
-    # model.to(device)
-    #print(autoencoder_val(model,test_loader,criterion=criterion,device=device))
+    # # train_auto_encoder(train_dataloader=train_loader,
+    # #                    val_dataloader=val_loader,
+    # #                    model=model,
+    # #                    model_path=model_path,
+    # #                    num_epochs=100,
+    # #                    criterion=criterion,
+    # #                    optimizer=optimizer)
+    # # model.load_state_dict(torch.load(model_path,weights_only=True))
+    # # model.to(device)
+    # #print(autoencoder_val(model,test_loader,criterion=criterion,device=device))
 
     # pnet_model.load_state_dict(torch.load(pnet_model_path,weights_only=True))
 
@@ -686,25 +721,25 @@ if __name__ == "__main__":
     # cae_model.to(device)
     # pnet_model.to(device)
 
-    # # print(validate_pnet(test_loader,pnet_model=pnet_model,CAE_model=cae_model))
+    # # # print(validate_pnet(test_loader,pnet_model=pnet_model,CAE_model=cae_model))
 
     # print(test_acc_pnet(val_dataloader=test_loader,pnet_model=pnet_model,CAE_model=cae_model,device=device))
 
-    # # Get one item from the test loader
-    # test_iter = iter(test_loader)
-    # input_image = next(test_iter)  # Assuming you only need the image, not the label
+    # # # Get one item from the test loader
+    # # test_iter = iter(test_loader)
+    # # input_image = next(test_iter)  # Assuming you only need the image, not the label
 
-    # im = input_image[0]
+    # # im = input_image[0]
 
-    # # Move the input image to the correct device
-    # im = im.to(device)
+    # # # Move the input image to the correct device
+    # # im = im.to(device)
 
-    # # Forward pass through the model
+    # # # Forward pass through the model
 
-    # recon, latent = model(im)
+    # # recon, latent = model(im)
 
 
-    # compare_images(im,recon)
+    # # compare_images(im,recon)
         
     
 

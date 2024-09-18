@@ -154,7 +154,14 @@ def calculate_potential_field(obstacle_map, distances, mass_map, influence_facto
 
     
 def pnet_replanner(pnet_path,obstacle_map):
-    pass
+    
+    reachable_coords = []
+    for coord in pnet_path:
+        if not obstacle_map[[coord[0],coord[1]]]:
+            reachable_coords.append(coord)
+
+
+
 
 
 

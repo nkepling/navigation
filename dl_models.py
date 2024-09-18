@@ -108,6 +108,22 @@ class DeeperValueIterationModel(torch.nn.Module):
 # I refrence this implementation from the following link: https://github.com/milesial/Pytorch-UNet/tree/master
 
 
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size=3):  # Changed kernel size to 3
+        super(SpatialAttention, self).__init__()
+        padding = (kernel_size - 1) // 2  # Padding to maintain the same spatial dimensions
+        self.conv1 = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=padding, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)  # Shape: (batch_size, 1, H, W)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)  # Shape: (batch_size, 1, H, W)
+        out = torch.cat([avg_out, max_out], dim=1)  # Shape: (batch_size, 2, H, W)
+        out = self.conv1(out)  # Shape: (batch_size, 1, H, W)
+        out = self.sigmoid(out)  # Apply sigmoid to normalize the attention map between 0 and 1
+        return x * out  # Shape: (batch_size, channels, H, W)
+
+
 class DoubleConv(nn.Module):
     def __init__(self,in_channels,out_channels) -> None:
         super().__init__()
@@ -127,6 +143,7 @@ class Up(nn.Module):
     def __init__(self, in_channels,out_channels) -> None:
         super(Up,self).__init__()
         self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3)
+        # self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2)
 
     def forward(self, x):
         return self.up(x)
@@ -135,6 +152,7 @@ class Down(nn.Module):
     def __init__(self) -> None:
         super(Down,self).__init__()
         self.down = nn.MaxPool2d(kernel_size=3,stride=1)
+        # self.down = nn.MaxPool2d(kernel_size=2,stride=2)
 
     def forward(self, x):
         return self.down(x)
@@ -149,6 +167,8 @@ class UNet(torch.nn.Module):
     def __init__(self) -> None:
         super(UNet,self).__init__()
 
+        self.spatial_attention = SpatialAttention()
+
         # down sample and up sample layers
         self.down = Down()
         self.up1 = Up(512,256)
@@ -158,7 +178,7 @@ class UNet(torch.nn.Module):
 
         # Double Convolution Layers
 
-        self.layer_1 = DoubleConv(2,32)
+        self.layer_1 = DoubleConv(1,32)
         self.layer_2 = DoubleConv(32,64)
         self.layer_3 = DoubleConv(64,128)
         self.layer_4 = DoubleConv(128,256)
@@ -175,32 +195,38 @@ class UNet(torch.nn.Module):
     def forward(self, x):
 
         ### Left Side of the UNet
-        layer_1_out = self.layer_1(x) # 2, 10, 10 -> 32, 10, 10
+        layer_1_out = self.layer_1(x) # 1, 10, 10 -> 32, 10, 10
+        layer_1_out = self.spatial_attention(layer_1_out)  # Apply spatial attention
 
-        layer_2_out = self.layer_2(self.down(layer_1_out)) # 32, 10, 10 -> 64, 8, 8
+        layer_2_out = self.layer_2(self.down(layer_1_out)) # 32, 10, 10 -> 64, 5, 5
+        layer_2_out = self.spatial_attention(layer_2_out)  # Apply spatial attention
 
-        layer_3_out = self.layer_3(self.down(layer_2_out)) # 64, 8, 8 -> 128, 6, 6
+        layer_3_out = self.layer_3(self.down(layer_2_out)) # 64, 5, 5 -> 128, 3, 3
+        layer_3_out = self.spatial_attention(layer_3_out)  # Apply spatial attention
 
-        layer_4_out = self.layer_4(self.down(layer_3_out)) # 128, 6, 6 -> 256, 4, 4
+        layer_4_out = self.layer_4(self.down(layer_3_out)) # 128, 3, 3 -> 256, 2, 2
+        layer_4_out = self.spatial_attention(layer_4_out)  # Apply spatial attention
 
-        layer_5_out = self.layer_5(self.down(layer_4_out)) # 256, 4, 4 -> 512, 2, 2
+        layer_5_out = self.layer_5(self.down(layer_4_out)) # 256, 2, 2 -> 512, 1, 1
 
         ### Right Side of the UNet
+        up_1_out = self.up1(layer_5_out) # 512, 1, 1 -> 256, 2, 2
+        layer_6_out = self.layer_6(torch.cat([up_1_out, layer_4_out], 1))
+        layer_6_out = self.spatial_attention(layer_6_out)  # Apply spatial attention
 
-        up_1_out = self.up1(layer_5_out) # 512, 2, 2 -> 256, 4, 4
-        layer_6_out = self.layer_6(torch.cat([up_1_out,layer_4_out],1)) # 512, 4, 4 -> 256, 4, 4
+        up_2_out = self.up2(layer_6_out) # 256, 2, 2 -> 128, 3, 3
+        layer_7_out = self.layer_7(torch.cat([up_2_out, layer_3_out], 1))
+        layer_7_out = self.spatial_attention(layer_7_out)  # Apply spatial attention
 
-        up_2_out = self.up2(layer_6_out) # 256, 4, 4 -> 128, 6, 6
-        layer_7_out = self.layer_7(torch.cat([up_2_out,layer_3_out],1))
+        up_3_out = self.up3(layer_7_out) # 128, 3, 3 -> 64, 5, 5
+        layer_8_out = self.layer_8(torch.cat([up_3_out, layer_2_out], 1))
+        layer_8_out = self.spatial_attention(layer_8_out)  # Apply spatial attention
 
-        up_3_out = self.up3(layer_7_out) # 128, 6, 6 -> 64, 8, 8
-        layer_8_out = self.layer_8(torch.cat([up_3_out,layer_2_out],1))
+        up_4_out = self.up4(layer_8_out) # 64, 5, 5 -> 32, 10, 10
+        layer_9_out = self.layer_9(torch.cat([up_4_out, layer_1_out], 1))
+        layer_9_out = self.spatial_attention(layer_9_out)  # Apply spatial attention
 
-        up_4_out = self.up4(layer_8_out) # 64, 8, 8 -> 32, 10, 10
-        layer_9_out = self.layer_9(torch.cat([up_4_out,layer_1_out],1))
-
-        out = self.out(layer_9_out) # 32, 10, 10 -> 1, 10, 10
-
+        out = self.out(layer_9_out)  # Final output
         return out
     
 
@@ -584,21 +610,35 @@ class PNetResNet(nn.Module):
 
 
 if __name__ == "__main__":
+    pass
     # model = PNet(coord_dim=2, latent_dim=128, hidden_dim=128, dropout_rate=0.5)
-    model = PNetResNet(2,128,128,32)
+    # model = PNetResNet(2,128,128,32)
+
+    # model = UNet()
+    # total_params = sum(p.numel() for p in model.parameters())
+    # print(f"Total number of parameters: {total_params}")
+
+   
+
+    # # # coords = torch.randn(32, 2)  # Batch size 32, 2D coordinates (x, y)
+    # # # latent = torch.randn(32, 128)  # Batch size 32, latent dimension from encoder
+
+    # # # # recon,latent = model(x)
+
+    # # # action_logits = model(coords,latent)
 
 
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters: {total_params}")
 
     # x = torch.randn(size = (1,1,10,10))
 
-    # coords = torch.randn(32, 2)  # Batch size 32, 2D coordinates (x, y)
-    # latent = torch.randn(32, 128)  # Batch size 32, latent dimension from encoder
+    # out = model(x)
 
-    # # recon,latent = model(x)
+    # print(out.shape)
 
-    # action_logits = model(coords,latent)
+
+
+
+    
     
 
 

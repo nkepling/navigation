@@ -4,12 +4,22 @@ Utility File
 import numpy as np
 import random
 import yaml
-import argparse
+
 import torch
 """
 Takes config: single double random
 and size n as inputs
 """
+
+# n = None
+# config = None
+# num_blocks = None
+# num_obstacles = None
+# obstacle_type = None
+# square_size = None
+# random_map = None
+# gamma = None
+
 def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
     if seed:
         np.random.seed(seed)
@@ -133,24 +143,16 @@ def load_env_config(config_file):
         config = yaml.load(f, Loader=yaml.FullLoader)
     return config
 
-
-def parse_arguments():
-    """Get environment configuration from the command line arguments
-
-    Returns:
-        n: int: size of the grid
-        num_blocks: int: number of positive reward blocks
-        config: str: types of positive reward distribution (block)
-        num_obstacles: int: number of obstacles
-        obstacle_type: str: type of obstacle distribution
-        square_size: int: size of the positive reward square
-        random_map: bool: whether to generate a random map
-        gamma: float: discount factor
-    """
+def parse_and_initialize():
+    global n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_config", type=str, default="env_config.yaml", help="Path to the config file")
     args = parser.parse_args()
+    
     env_config = load_env_config(args.env_config)
+    
+    # Initialize the global constants
     n = env_config["n"]
     config = env_config["config"]
     num_blocks = env_config["num_blocks"]
@@ -160,7 +162,10 @@ def parse_arguments():
     random_map = env_config["random_map"]
     gamma = env_config["gamma"]
 
-    return n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
+# Function to ensure constants are initialized when needed
+def ensure_initialized():
+    if n is None or config is None:
+        parse_and_initialize()
 
 def format_input_for_ddqn_cnn(state):
     if not isinstance(state,torch.Tensor):
@@ -172,11 +177,11 @@ def format_input_for_ddqn_cnn(state):
 
     return state
 
-
-n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
-
 if __name__ == "__main__":
-    n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma = parse_arguments()
+    ensure_initialized()
+    print(f"n = {n}, config = {config}, num_blocks = {num_blocks}, gamma = {gamma}")
+
+
     
     
 

@@ -90,7 +90,7 @@ def get_p_net_path(cae_net,cae_net_path, pnet,pnet_path,obstacles_map,rewards,st
             return pathlist
 
         agent_pos = next_pos
-        
+
         pathlist.append(agent_pos)
         step+=1
     
@@ -171,7 +171,7 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
         plt.suptitle(f"Comparison of Paths (Seed: {seed})")
 
 
-    plt.savefig("images/" + f"{seed}"+"path_comparison_final.png", format='png')  # Save the figure as a PNG file
+    plt.savefig("images/" + f"{seed}"+"path_comparison_deeper_pnet.png", format='png')  # Save the figure as a PNG file
     plt.show()
 
 
@@ -184,8 +184,8 @@ if __name__ == "__main__":
         obstacles_map = pickle.load(f)
 
 
-    pnet = PNetResNet(2,128,128,5)
-    pnet_path = "model_weights/pnet_resnet_1.pth"
+    pnet = PNetResNet(2,128,128,8)
+    pnet_path = "model_weights/pnet_resnet_2.pth"
 
     cae_net = ContractiveAutoEncoder()
     cae_net_path = "model_weights/CAE_1.pth"
