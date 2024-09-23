@@ -161,6 +161,33 @@ def pnet_replanner(pnet_path,obstacle_map):
             reachable_coords.append(coord)
 
 
+def momentum(agent_pos,V,prev_dir,neighbors,alpha = 0.1):
+    """Function that biases the values toward the previous dirction. A 'momentum' of sorts.
+    """
+    
+    Vs = {}
+    
+    for neigh in neighbors[agent_pos]:
+        Vs[neigh] = V[neigh]
+        
+        if prev_dir is not None:
+            Vs[neigh] =Vs[neigh] + alpha * np.dot(prev_dir,neigh - agent_pos)
+
+    return max(Vs,key=Vs.get)
+    
+    
+
+
+        
+
+     
+     
+
+    
+
+
+
+
 
 
 
