@@ -1,0 +1,4 @@
+--datafile /Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/training_data/full_traj_vin_data.npz
+--k 16
+--l_i 2
+--l_q 4

@@ -1,0 +1,75 @@
+Value Iteration,False,744,0.0019641603742327008,True,14
+Neural Network + Value Iteration,False,744,0.004416772297450474,True,14
+Neural Network,True,744,0.0010625015605579722,False,10
+Value Iteration,False,481,0.0018453814766623757,True,11
+Neural Network + Value Iteration,False,481,0.0037703080610795455,True,11
+Neural Network,True,481,0.001103466207330877,False,10
+Value Iteration,False,573,0.0017819530085513467,True,19
+Neural Network + Value Iteration,False,573,0.0036927900816264903,True,19
+Neural Network,True,573,0.0011284602315802324,False,18
+Value Iteration,False,564,0.001728375752766927,True,9
+Neural Network + Value Iteration,False,564,0.004037671618991428,True,9
+Neural Network,False,564,0.0010028680165608723,True,9
+Value Iteration,False,892,0.0018540109906877791,True,7
+Neural Network + Value Iteration,False,892,0.00413203239440918,True,7
+Neural Network,False,892,0.0013932500566755021,True,7
+Value Iteration,False,252,0.0017074382666385536,True,33
+Neural Network + Value Iteration,False,252,0.0037605762481689453,True,33
+Neural Network,True,252,0.0010986214592343284,False,20
+Value Iteration,False,465,0.0017578072018093532,True,9
+Neural Network + Value Iteration,False,465,0.003719329833984375,True,9
+Neural Network,False,465,0.0010487768385145399,True,9
+Value Iteration,False,439,0.0018461810217963324,True,27
+Neural Network + Value Iteration,False,439,0.003797539958247432,True,27
+Neural Network,True,439,0.0010151147842407226,False,19
+Value Iteration,False,72,0.0018539667129516602,True,10
+Neural Network + Value Iteration,False,72,0.0037029027938842774,True,10
+Neural Network,True,72,0.0010378737198679072,False,18
+Value Iteration,False,615,0.0018886668341500418,True,14
+Neural Network + Value Iteration,False,615,0.0037897484643118723,True,14
+Neural Network,False,615,0.0010659524372645787,True,14
+Value Iteration,False,625,0.0018567187445504324,True,14
+Neural Network + Value Iteration,False,625,0.003911818776811872,True,14
+Neural Network,False,625,0.0010527372360229492,True,14
+Value Iteration,False,554,0.0018755992253621419,True,12
+Neural Network + Value Iteration,False,554,0.0037377278010050454,True,12
+Neural Network,False,554,0.0010230739911397297,True,12
+Value Iteration,False,749,0.0017325416687996157,True,31
+Neural Network + Value Iteration,False,749,0.003928684419201267,True,31
+Neural Network,True,749,0.0010552125818589155,False,16
+Value Iteration,False,432,0.0018840432167053223,True,16
+Neural Network + Value Iteration,False,432,0.0040274858474731445,True,16
+Neural Network,True,432,0.0010314345359802245,False,19
+Value Iteration,False,27,0.00176744990878635,True,9
+Neural Network + Value Iteration,False,27,0.0036292076110839844,True,9
+Neural Network,False,27,0.0009921126895480687,True,9
+Value Iteration,False,350,0.0017610648099113913,True,34
+Neural Network + Value Iteration,False,350,0.003749202279483571,True,34
+Neural Network,True,350,0.0010251601537068684,False,23
+Value Iteration,False,204,0.001823041174146864,True,18
+Neural Network + Value Iteration,False,204,0.003908064630296495,True,18
+Neural Network,True,204,0.0010251771836053756,False,20
+Value Iteration,False,381,0.0017342567443847656,True,9
+Neural Network + Value Iteration,False,381,0.003246148427327474,True,9
+Neural Network,False,381,0.0010003778669569227,True,9
+Value Iteration,False,204,0.0018174383375379774,True,18
+Neural Network + Value Iteration,False,204,0.0038294262356228298,True,18
+Neural Network,True,204,0.0010209651220412482,False,20
+Value Iteration,False,531,0.0019250578350490993,True,18
+Neural Network + Value Iteration,False,531,0.003882394896613227,True,18
+Neural Network,True,531,0.0010205182162198153,False,10
+Value Iteration,False,451,0.0017451470898043725,True,31
+Neural Network + Value Iteration,False,451,0.003766298294067383,True,31
+Neural Network,True,451,0.0010229240764271128,False,10
+Value Iteration,False,280,0.001798725128173828,True,15
+Neural Network + Value Iteration,False,280,0.0035543441772460938,True,15
+Neural Network,True,280,0.0010588277469981801,False,21
+Value Iteration,False,569,0.0022196068483240463,True,17
+Neural Network + Value Iteration,False,569,0.0047613171970143035,True,17
+Neural Network,True,569,0.001005102606380687,False,16
+Value Iteration,False,481,0.001841956918889826,True,11
+Neural Network + Value Iteration,False,481,0.003626259890469638,True,11
+Neural Network,True,481,0.0010473077947443182,False,10
+Value Iteration,False,108,0.0018102472478693182,True,11
+Neural Network + Value Iteration,False,108,0.003811771219426935,True,11
+Neural Network,False,108,0.0009926232424649324,True,11

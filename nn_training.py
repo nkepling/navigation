@@ -23,7 +23,7 @@ import os
 
 # ensure_initialized()
 # NOTE: You have to from utils import * in order to run this code. In the utils file I set the map + value iteration configs. 
-
+ 
 if torch.cuda.is_available():
     device = torch.device("cuda")
 elif torch.backends.mps.is_available():

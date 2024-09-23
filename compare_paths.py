@@ -9,47 +9,67 @@ import torch
 from eval import *
 from dl_models import *
 from get_training_data import * 
+from pytorch_value_iteration_networks.model import *
+import time
 
 
-# def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
-#     agent_pos = deepcopy(start)
-#     checker = LiveLockChecker(counter=0,last_visited={})
-#     model = UNetSmall()
-#     model.load_state_dict(torch.load("model_weights/unet_small_5.pth",weights_only=True))
-#     model.eval()
-#     pathlist = []
-#     pathlist.append(agent_pos)
-#     while agent_pos != goal:
-#         input = reformat_input(rewards, obstacles_map)
-#         input = input.unsqueeze(0)
-#         V= model(input).detach().numpy().squeeze()
-#         policy = extract_policy(V,obstacles_map,neighbors,10)
-#         next_pos = tuple(int(i) for i in policy[agent_pos])
+def get_vin_path(vin, n, obstacle_map,rewards, start,goal):
 
-#         checker.update(agent_pos,next_pos)
-#         if checker.check(agent_pos,next_pos):
-#             print("Live Lock Detected")
-#             path = center_of_mass_heuristic(obstacles_map,rewards,agent_pos)
-#             i = 1
-#             while rewards[agent_pos] == 0:
-#                 next_pos = path[i]
-#                 #visualize_rewards(rewards,obstacles_map,start,goal,agent_pos,next_pos)
-#                 agent_pos = next_pos
-#                 pathlist.append(tuple(agent_pos))
-#                 i+=1
-                
-#             # next_pos = path[1]
-#             # visualize_rewards(rewards,obstacle_map,start,goal,agent_pos,next_pos)
-#             # agent_pos = next_pos
 
-#             rewards[agent_pos] = 0
-#         else:
-#             #visualize_rewards(rewards, obstacles_map, start, goal, agent_pos, next_pos)
-#             agent_pos = next_pos
-#             pathlist.append(tuple(agent_pos))
-#             rewards[agent_pos] = 0
-#         # path.append(agent_pos)
-#     return path
+    actions = {0:(0,-1),
+               1:(1,0),
+               2:(0,1),
+               3:(-1,0)} # up, right, down , left
+
+    checker = LiveLockChecker(counter=0,last_visited={})
+    agent_pos = deepcopy(start)
+    path = [agent_pos]
+    max_step = 50
+    step = 0
+
+    infrence_time = []
+
+    while agent_pos!=goal and step<max_step:
+        rewards[agent_pos[0],agent_pos[1]] = 0
+        input = reformat_input(rewards,obstacle_map)
+        input = input.unsqueeze(0)
+        assert input.shape == (1,2,n,n) 
+
+        start = time.time()
+
+        logits,_ = vin(input,torch.tensor(agent_pos[0]),torch.tensor(agent_pos[1]),16)
+
+        end = time.time() - start
+
+        infrence_time.append(end)
+
+        pred = torch.argmax(logits).item()
+
+        action = actions[pred]
+
+        new_pos = tuple([agent_pos[0] + action[0],agent_pos[1]+action[1]])
+
+        checker.update(agent_pos,new_pos)
+        if checker.check(agent_pos,new_pos):
+            print("Live Lock Detected")
+            print(np.mean(infrence_time))
+            break
+            # path = center_of_mass_heuristic(obstacles_map, rewards, agent_pos)
+
+
+            # new_pos = tuple([agent_pos[0] + action[0],agent_pos[1]+action[1]])
+            # checker.update(agent_pos,new_pos)
+
+        
+        agent_pos = new_pos
+
+        path.append(agent_pos)
+
+    print("mean infrence time" ,np.mean(infrence_time))
+    print("total time to reach goal", np.sum(infrence_time))
+    return path
+        
+
 
 
 
@@ -87,21 +107,18 @@ def get_p_net_path(cae_net,cae_net_path, pnet,pnet_path,obstacles_map,rewards,st
         checker.update(agent_pos,next_pos)
         if checker.check(agent_pos,next_pos):
             print("Live lock detected")
+
+
             return pathlist
 
         agent_pos = next_pos
 
-        pathlist.append(agent_pos)
+        pathlist.append(agent_pos)  
         step+=1
     
     return pathlist
 
     
-
-
-
-
-
 
 def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
     agent_pos = deepcopy(start)
@@ -171,15 +188,18 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
         plt.suptitle(f"Comparison of Paths (Seed: {seed})")
 
 
-    plt.savefig("images/" + f"{seed}"+"path_comparison_deeper_pnet.png", format='png')  # Save the figure as a PNG file
+    plt.savefig("images/" + f"{seed}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
     plt.show()
 
 
 
-
-
 if __name__ == "__main__":
-    seeds = np.random.randint(0,1000,10)
+    from types import SimpleNamespace
+
+
+    seeds = np.random.randint(0,6000,100)
+    # seeds = [44,29,590,358]
+
     with open('obstacle.pkl', 'rb') as f:
         obstacles_map = pickle.load(f)
 
@@ -190,28 +210,45 @@ if __name__ == "__main__":
     cae_net = ContractiveAutoEncoder()
     cae_net_path = "model_weights/CAE_1.pth"
 
+
+    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/vin_full_traj.pth', weights_only=True)
+
+    config = SimpleNamespace(k = 16, 
+                            l_i = 2,
+                            l_q = 4,
+                            l_h = 150,
+                            imsize = 10,
+                            batch_sz = 1
+                            )
+
+    vin = VIN(config)
+    vin.load_state_dict(vin_weights)
+    vin.eval()
+
     for seed in seeds:
-        rewards, obstacles_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
+        rewards, obstacles_map = init_map(n, "block", num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
         neighbors = precompute_next_states(n, obstacles_map)
         start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
-        model = UNetSmall()
-        model.load_state_dict(torch.load("model_weights/unet_small_7.pth",weights_only=True))
+        #model = UNetSmall()
+        #model.load_state_dict(torch.load("model_weights/unet_small_7.pth",weights_only=True))
         input = reformat_input(rewards, obstacles_map)
         input = input.unsqueeze(0)
-        print(input.shape)
 
-        V= model(input).detach().numpy().squeeze()
 
-        Viter = value_iteration(n, rewards.copy(), obstacles_map, gamma,neighbors)
-        V_init = nn_initialized_vi(model,n, rewards.copy(), obstacles_map, gamma,neighbors)
+        #V= model(input).detach().numpy().squeeze()
 
-        path1 = get_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal, model)
+        #Viter = value_iteration(n, rewards.copy(), obstacles_map, gamma,neighbors)
+        #V_init = nn_initialized_vi(model,n, rewards.copy(), obstacles_map, gamma,neighbors)
+
+        #path1 = get_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal, model)
         path2 = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
-        path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)
-        path4 = get_heuristic_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
-        path5 = get_p_net_path(cae_net,cae_net_path,pnet,pnet_path,obstacles_map,rewards,start,goal)
+        #path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)q
+        #path4 = get_heuristic_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
+        #path5 = get_p_net_path(cae_net,cae_net_path,pnet,pnet_path,obstacles_map,rewards.copy(),start,goal)
+        path6 = get_vin_path(vin,10,obstacles_map,rewards.copy(),start,goal)
 
-        paths = [path1,path2,path3,path4,path5]
-        titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET"]
+        paths = [path2,path6]
+        # titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET","VIN"]
+        titles = ["VI","VIN"]
 
         compare_paths(paths, rewards, obstacles_map, goal,seed=seed,titles=titles)

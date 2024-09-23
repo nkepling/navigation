@@ -13,6 +13,21 @@ from vi_with_nn_init import nn_initialized_vi
 from collections import defaultdict
 from dl_models import UNetSmall
 
+# Define the input map
+n = 10  # size of the grid
+config = "block"  # distribution of positive probability cells
+num_blocks = 3  # number of positive region blocks
+num_obstacles = 3  # number of obstacles
+obstacle_type = "block"
+square_size = 4  # size of the positive region square
+
+# Discount factor
+gamma = 0.8
+
+# define experiment configuration
+random_map = True
+
+
 
 def get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model):
     agent_position = deepcopy(start)
