@@ -103,7 +103,7 @@ Generate dataset for training the VIN model.  The inputs are images whre one cha
 The reward image encodes both the obstacles and the rewards map.
 """
 
-def vin_data(n_rewards):
+def vin_data(n_rewards, seeds, num_reward_variants=10):
     with open("obstacle.pkl", "rb") as f:
         obstacle_map = pickle.load(f)
 
@@ -112,70 +112,83 @@ def vin_data(n_rewards):
     S2 = []
     Labels = []
 
-    neighbors = precompute_next_states(n,obstacle_map)
 
-    with tqdm.tqdm(total=n_rewards) as pbar:
-        for _ in range(n_rewards):
-            reward,obstacle_map = init_map(n,config,num_blocks,num_obstacles,obstacle_type,obstacle_map=obstacle_map)
-            # states_xy = sample_trajectories(num_trajectories,reward,obstacle_map) # shoould be numpy array of shape (num_trajectories, num_states, 2)
-            states_xy,reward_list =get_full_trajectory(n,reward,obstacle_map,neighbors,start=(0,0))
-        
-          
-            actions = extract_action(states_xy) # for each trajectory, extract the actions that were taken
-            states_xy = states_xy[:-1] 
-            assert reward_list.shape == (len(states_xy),2,n,n), f"reward_list shape {reward_list.shape}"
-            ns = len(states_xy)
-            # map_data = np.where(obstacle_map,1,0) # obstacle map 1 if obstacle, 0 if free
-            # map_data = np.resize(map_data,(1,1,n,n))
-            # value_prior = np.resize(reward,(1,1,n,n))
-            # iv_mixed = np.concatenate((map_data,value_prior),axis=1)
+    neighbors = precompute_next_states(n, obstacle_map)
 
-            # X_cur  = np.tile(iv_mixed,(ns,1,1,1))
-            S1_cur = np.expand_dims(states_xy[0:ns,0],axis=1) # x coordinates
-
-            S2_cur = np.expand_dims(states_xy[0:ns,1],axis=1) # y coordinates
-
-            Labels_cur = np.expand_dims(actions,axis=1) # actions taken
-
-            X.append(reward_list)
-            S1.append(S1_cur)
-            S2.append(S2_cur)
-            Labels.append(Labels_cur)
-            pbar.update(1)
-        
-    X = np.concatenate(X,axis=0)
-    S1 = np.concatenate(S1,axis=0)
-    S2 = np.concatenate(S2,axis=0)
-    Labels = np.concatenate(Labels,axis=0)
-
-    print("X shape ",X.shape)
-    print("S1 shape ",S1.shape)
-    print("S2 shape ",S2.shape)
-    print("Labels shape ",Labels.shape)
+    with tqdm.tqdm(total=num_obstacles) as pbar_obs:
+        for seed in seeds:
+            # Generate a fixed obstacle map for the seed
+            reward, obstacle_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, seed=seed)
+            neighbors = precompute_next_states(10,obstacle_map)
+            with tqdm.tqdm(total=n_rewards * num_reward_variants) as pbar:
+                # For each map configuration, create `num_reward_variants` different reward distributions
+                for _ in range(n_rewards):
+                    for variant in range(num_reward_variants):
+                        prev_reward = reward
+                        # Generate a different reward map for each variant
+                        reward, obstacle_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
+                        
 
 
+                        # Get trajectories and reward maps
+                        states_xy, reward_list = get_full_trajectory(n, reward, obstacle_map, neighbors, start=(0, 0))
+                        
+                        actions = extract_action(states_xy)  # Extract actions from the trajectory
+                        states_xy = states_xy[:-1] 
+                        assert reward_list.shape == (len(states_xy), 2, n, n), f"reward_list shape {reward_list.shape}"
+                        ns = len(states_xy)
+                        
+                        # Prepare the data
+                        S1_cur = np.expand_dims(states_xy[0:ns, 0], axis=1)  # x coordinates
+                        S2_cur = np.expand_dims(states_xy[0:ns, 1], axis=1)  # y coordinates
+                        Labels_cur = np.expand_dims(actions, axis=1)  # actions taken
 
-    return X,S1,S2,Labels
+                        # Append the data to lists
+                        X.append(reward_list)
+                        S1.append(S1_cur)
+                        S2.append(S2_cur)
+                        Labels.append(Labels_cur)
 
-def main(n_train,n_test,save_path):
-    os.makedirs("vin_data",exist_ok=True)
+                        pbar.update(1)
+                    pbar_obs.update(1)
+
+    # Concatenate all data
+    X = np.concatenate(X, axis=0)
+    S1 = np.concatenate(S1, axis=0)
+    S2 = np.concatenate(S2, axis=0)
+    Labels = np.concatenate(Labels, axis=0)
+
+    print("X shape ", X.shape)
+    print("S1 shape ", S1.shape)
+    print("S2 shape ", S2.shape)
+    print("Labels shape ", Labels.shape)
+
+    return X, S1, S2, Labels
+
+def main(n_train, n_test, save_path, train_seeds,test_seeds):
+    os.makedirs("vin_data", exist_ok=True)
     print("Generating training data for VIN model")
-    X,S1,S2,Labels = vin_data(n_train)
-    print("Generating_test_data")
-    X_test,S1_test,S2_test,Labels_test = vin_data(n_test)
-    np.savez_compressed(save_path,X,S1,S2,Labels,X_test,S1_test,S2_test,Labels_test)
+    X, S1, S2, Labels = vin_data(n_train, train_seeds, num_reward_variants=10)  # 10 reward variants per map config
+    print("Generating test data")
+    X_test, S1_test, S2_test, Labels_test = vin_data(n_test,test_seeds, num_reward_variants=10)  # 10 reward variants per map config
+    np.savez_compressed(save_path, X, S1, S2, Labels, X_test, S1_test, S2_test, Labels_test)
 
     print(f"Saved data to {save_path}")
-    return X,S1,S2,Labels
-
+    return X, S1, S2, Labels
 if __name__ == "__main__":
 
     num_trajectories = 3 # number of trajectories to sample from each reward map
     #n_rewards = 3 # numerb of reward maps to generate
-    n_train = 5000
-    n_test = 1000
-    save_path = "training_data/full_traj_vin_data.npz"
-    X,S1,S2,Labels = main(n_train,n_test,save_path)
+    n_train = 1
+    n_test = 2
+    n_rewards = 7
+
+    train_seeds = [x for x in range(n_train)]
+    test_seeds = [x for x in range(n_test)]
+
+
+    save_path = "training_data/all_obs.npz"
+    X,S1,S2,Labels = main(n_train,n_test,save_path,train_seeds,test_seeds)
     # X,S1,S2,Labels = vin_data(num_trajectories,n_rewards)
 
     
