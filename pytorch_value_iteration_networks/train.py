@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from dataset.dataset import *
 from utility.utils import *
 from model import *
+import os
 
 
 class EarlyStopping:
@@ -44,7 +45,7 @@ class EarlyStopping:
 
     def save_checkpoint(self, model):
         '''Save the model when validation loss improves.'''
-        torch.save(model.state_dict(),"model_weights/" + self.path+".pth")
+        torch.save(model.state_dict(),"../model_weights/" + self.path+".pth")
         print(f"Model saved at epoch with validation loss: {self.best_loss:.4f}")
 
     
@@ -56,7 +57,7 @@ def plot_loss(train_losses,val_losses):
     plt.ylabel('Loss')
     plt.title('Loss')
     plt.savefig('loss.png')
-    plt.show()
+
 
 
 def train(net: VIN, trainloader, testloader,config, criterion, optimizer):
@@ -71,7 +72,7 @@ def train(net: VIN, trainloader, testloader,config, criterion, optimizer):
     else:
         device = torch.device("cpu")
 
-    early_stopping = EarlyStopping(patience=10, delta=0.001, path='vin_full_traj')
+    early_stopping = EarlyStopping(patience=10, delta=0.001, path='vin_all_obs')
     train_losses = []
     val_losses = []
     for epoch in range(config.epochs):  # Loop over dataset multiple times
@@ -112,6 +113,8 @@ def train(net: VIN, trainloader, testloader,config, criterion, optimizer):
         if early_stopping.early_stop:
             print("Early stopping")
             break
+
+
     
     plot_loss(train_losses,val_losses)
     print('\nFinished training. \n')
@@ -193,7 +196,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--datafile',
         type=str,
-        default='/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/training_data/full_traj_vin_data.npz',
+        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/all_obs.npz',
         help='Path to data file')
     parser.add_argument('--imsize', type=int, default=10, help='Size of image')
     parser.add_argument(
@@ -222,7 +225,7 @@ if __name__ == '__main__':
     config = parser.parse_args()
     # Get path to save trained model
     # save_path = "trained/vin_{0}x{0}.pth".format(config.imsize)
-    save_path = "pytorch_value_iteration_networks/trained/vin_full_traj_2.pth"
+    save_path = "trained/vin_all_obs_1.pth"
     # Instantiate a VIN model
     net = VIN(config)
     # Loss

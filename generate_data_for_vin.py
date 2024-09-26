@@ -112,45 +112,66 @@ def vin_data(n_rewards, seeds, num_reward_variants=10):
     S2 = []
     Labels = []
 
-
-    neighbors = precompute_next_states(n, obstacle_map)
-
-    with tqdm.tqdm(total=num_obstacles) as pbar_obs:
+    with tqdm.tqdm(total=len(seeds)) as pbar_obs:  # Corrected `seeds` for progress bar
         for seed in seeds:
             # Generate a fixed obstacle map for the seed
-            reward, obstacle_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, seed=seed)
-            neighbors = precompute_next_states(10,obstacle_map)
-            with tqdm.tqdm(total=n_rewards * num_reward_variants) as pbar:
-                # For each map configuration, create `num_reward_variants` different reward distributions
-                for _ in range(n_rewards):
-                    for variant in range(num_reward_variants):
-                        prev_reward = reward
-                        # Generate a different reward map for each variant
-                        reward, obstacle_map = init_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
-                        
+            reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, seed=seed)
+            neighbors = precompute_next_states(n, obstacle_map)  # Using `n` instead of hardcoded 10 for consistency
+            
+           
+            # For each map configuration, create `num_reward_variants` different reward distributions
+            for variant in range(num_reward_variants):
+                prev_reward = reward  # Keep a copy of the original reward map if needed
+                
+                # Generate a different reward map for each variant
+                reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
+                
+                if np.sum(reward) == 0:
+                    print("No reward skipping")
+                    continue
+
+                # Get trajectories and reward maps
+                states_xy, reward_list = get_full_trajectory(n, reward.copy(), obstacle_map, neighbors, start=(0, 0))
+                
+                # Skip empty reward lists (i.e., no trajectory or no rewards)
+                if len(reward_list) == 0:
+                    print(f"Skipping empty trajectory for seed {seed}, variant {variant}")
+                    continue
+                
+
+                skip_variant = False
+
+                state_diff = np.diff(states_xy, axis=0)  # Calculate state transitions
+                for i in range(len(state_diff)):
+                    diff = tuple(state_diff[i])
+                    if diff == (0, 0):
+                        print(f"Skipping (0, 0) movement at step {i}")
+                        skip_variant = True
+                        break
+                
+                if skip_variant:
+                    continue 
+
+                
+                actions = extract_action(states_xy)  # Extract actions from the trajectory
+                states_xy = states_xy[:-1]  # Remove last state as it corresponds to the final state
+                assert reward_list.shape == (len(states_xy), 2, n, n), f"reward_list shape {reward_list.shape}"
+
+                ns = len(states_xy)  # Number of states in trajectory
+                
+                # Prepare the data
+                S1_cur = np.expand_dims(states_xy[:, 0], axis=1)  # x coordinates
+                S2_cur = np.expand_dims(states_xy[:, 1], axis=1)  # y coordinates
+                Labels_cur = np.expand_dims(actions, axis=1)  # actions taken
+
+                # Append the data to lists
+                X.append(reward_list)
+                S1.append(S1_cur)
+                S2.append(S2_cur)
+                Labels.append(Labels_cur)
 
 
-                        # Get trajectories and reward maps
-                        states_xy, reward_list = get_full_trajectory(n, reward, obstacle_map, neighbors, start=(0, 0))
-                        
-                        actions = extract_action(states_xy)  # Extract actions from the trajectory
-                        states_xy = states_xy[:-1] 
-                        assert reward_list.shape == (len(states_xy), 2, n, n), f"reward_list shape {reward_list.shape}"
-                        ns = len(states_xy)
-                        
-                        # Prepare the data
-                        S1_cur = np.expand_dims(states_xy[0:ns, 0], axis=1)  # x coordinates
-                        S2_cur = np.expand_dims(states_xy[0:ns, 1], axis=1)  # y coordinates
-                        Labels_cur = np.expand_dims(actions, axis=1)  # actions taken
-
-                        # Append the data to lists
-                        X.append(reward_list)
-                        S1.append(S1_cur)
-                        S2.append(S2_cur)
-                        Labels.append(Labels_cur)
-
-                        pbar.update(1)
-                    pbar_obs.update(1)
+            pbar_obs.update(1)
 
     # Concatenate all data
     X = np.concatenate(X, axis=0)
@@ -158,12 +179,13 @@ def vin_data(n_rewards, seeds, num_reward_variants=10):
     S2 = np.concatenate(S2, axis=0)
     Labels = np.concatenate(Labels, axis=0)
 
-    print("X shape ", X.shape)
-    print("S1 shape ", S1.shape)
-    print("S2 shape ", S2.shape)
-    print("Labels shape ", Labels.shape)
+    print("X shape: ", X.shape)
+    print("S1 shape: ", S1.shape)
+    print("S2 shape: ", S2.shape)
+    print("Labels shape: ", Labels.shape)
 
     return X, S1, S2, Labels
+
 
 def main(n_train, n_test, save_path, train_seeds,test_seeds):
     os.makedirs("vin_data", exist_ok=True)
@@ -179,12 +201,12 @@ if __name__ == "__main__":
 
     num_trajectories = 3 # number of trajectories to sample from each reward map
     #n_rewards = 3 # numerb of reward maps to generate
-    n_train = 1
-    n_test = 2
-    n_rewards = 7
+    n_train = 5000
+    n_test = 1000
+    n_rewards = 3
 
     train_seeds = [x for x in range(n_train)]
-    test_seeds = [x for x in range(n_test)]
+    test_seeds = [x for x in range(n_train+1,n_test+n_train)]
 
 
     save_path = "training_data/all_obs.npz"
