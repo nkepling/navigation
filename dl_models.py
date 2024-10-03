@@ -609,6 +609,16 @@ class PNetResNet(nn.Module):
 
 
 
+class LocalValPred(nn.Module):
+    def __init__():
+        pass
+
+    def forward():
+        pass
+    
+
+
+
 if __name__ == "__main__":
     pass
     # model = PNet(coord_dim=2, latent_dim=128, hidden_dim=128, dropout_rate=0.5)

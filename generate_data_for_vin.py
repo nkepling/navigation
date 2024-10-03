@@ -14,9 +14,12 @@ import fo_solver
 n = 10  # size of the grid
 config = "block"  # distribution of positive probability cells
 num_blocks = 3  # number of positive region blocks
-num_obstacles = 3  # number of obstacles
+# num_obstacles = 3  # number of obstacles
 obstacle_type = "block"
 square_size = 4  # size of the positive region square
+
+min_obstacles = 0 
+max_obstacles = 6
 
 # Discount factor
 gamma = 0.8
@@ -115,8 +118,8 @@ def vin_data(n_rewards, seeds, num_reward_variants=10):
     with tqdm.tqdm(total=len(seeds)) as pbar_obs:  # Corrected `seeds` for progress bar
         for seed in seeds:
             # Generate a fixed obstacle map for the seed
-            reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, seed=seed)
-            neighbors = precompute_next_states(n, obstacle_map)  # Using `n` instead of hardcoded 10 for consistency
+            reward, obstacle_map = init_random_reachable_map(n, "block", num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=None, seed=seed)
+            neighbors = precompute_next_states(n , obstacle_map)  # Using `n` instead of hardcoded 10 for consistency
             
            
             # For each map configuration, create `num_reward_variants` different reward distributions
@@ -124,7 +127,8 @@ def vin_data(n_rewards, seeds, num_reward_variants=10):
                 prev_reward = reward  # Keep a copy of the original reward map if needed
                 
                 # Generate a different reward map for each variant
-                reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
+                #reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
+                reward, obstacle_map = init_random_reachable_map(n, "block", num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=obstacle_map, seed=None)
                 
                 if np.sum(reward) == 0:
                     print("No reward skipping")
@@ -201,15 +205,15 @@ if __name__ == "__main__":
 
     num_trajectories = 3 # number of trajectories to sample from each reward map
     #n_rewards = 3 # numerb of reward maps to generate
-    n_train = 5000
-    n_test = 1000
-    n_rewards = 3
+    n_train = 10000
+    n_test = 2400
+    #n_rewards = 3
 
     train_seeds = [x for x in range(n_train)]
     test_seeds = [x for x in range(n_train+1,n_test+n_train)]
 
 
-    save_path = "training_data/all_obs.npz"
+    save_path = "training_data/diverse_traj.npz"
     X,S1,S2,Labels = main(n_train,n_test,save_path,train_seeds,test_seeds)
     # X,S1,S2,Labels = vin_data(num_trajectories,n_rewards)
 

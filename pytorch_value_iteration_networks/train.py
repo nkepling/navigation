@@ -196,7 +196,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--datafile',
         type=str,
-        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/all_obs.npz',
+        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/diverse_traj.npz',
         help='Path to data file')
     parser.add_argument('--imsize', type=int, default=10, help='Size of image')
     parser.add_argument(
@@ -205,7 +205,7 @@ if __name__ == '__main__':
         default=0.001,
         help='Learning rate, [0.01, 0.005, 0.002, 0.001]')
     parser.add_argument(
-        '--epochs', type=int, default=60, help='Number of epochs to train')
+        '--epochs', type=int, default=300, help='Number of epochs to train')
     parser.add_argument(
         '--k', type=int, default=16, help='Number of Value Iterations')
     parser.add_argument(
@@ -221,7 +221,7 @@ if __name__ == '__main__':
         default=4,
         help='Number of channels in q layer (~actions) in VI-module')
     parser.add_argument(
-        '--batch_size', type=int, default=64, help='Batch size')
+        '--batch_size', type=int, default=128, help='Batch size')
     config = parser.parse_args()
     # Get path to save trained model
     # save_path = "trained/vin_{0}x{0}.pth".format(config.imsize)
@@ -244,11 +244,16 @@ if __name__ == '__main__':
         train=False,
         transform=transform)
     # Create Dataloader
+
+    # print(len(trainset))
     trainloader = torch.utils.data.DataLoader(
         trainset, batch_size=config.batch_size, shuffle=True, num_workers=0)
     testloader = torch.utils.data.DataLoader(
         testset, batch_size=config.batch_size, shuffle=False, num_workers=0)
-    # Train the model
+
+
+    
+    #Train the model
     train(net, trainloader, testloader, config, criterion, optimizer)
     # Test accuracy
     test(net, testloader, config)

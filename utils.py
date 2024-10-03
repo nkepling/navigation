@@ -20,6 +20,10 @@ and size n as inputs
 # random_map = None
 # gamma = None
 
+
+
+
+
 def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
     if seed:
         np.random.seed(seed)
@@ -171,6 +175,77 @@ def init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type="bloc
             print("Regenerating map: Non-obstacle cells are not fully reachable.")
 
     return rewards, obstacles_map
+
+
+def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=None, seed=None):
+    if seed:
+        np.random.seed(seed)
+        random.seed(seed)
+        
+    while True:  # Loop until we generate a valid map
+        rewards = np.zeros((n, n))
+        obstacles_map = np.zeros((n, n), dtype=bool)
+
+        if config == "block":
+            for _ in range(num_blocks):
+                start_x = random.randrange(0, n)
+                start_y = random.randrange(0, n)
+                end_x = min(start_x + square_size, n)
+                end_y = min(start_y + square_size, n)
+                rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 100, (end_x - start_x, end_y - start_y))
+
+        if obstacle_map is not None:
+            obstacles_map = obstacle_map
+            rewards[obstacles_map] = 0
+
+        else:
+            # Randomize the number of obstacles within a given range
+            num_obstacles = random.randint(min_obstacles, max_obstacles)
+
+            # Define obstacle diversity parameters
+            obstacle_square_size = random.randint(2, 5)  # Randomize obstacle size
+            obstacle_cluster_prob = 0.3  # Probability of forming obstacle clusters
+            
+            if obstacle_type == "random":
+                for _ in range(num_obstacles):
+                    x, y = np.random.randint(0, n, size=2)
+                    if rewards[x, y] != 0:
+                        rewards[x, y] = 0
+                    obstacles_map[x, y] = True
+
+            elif obstacle_type == "block":
+                for _ in range(num_obstacles):
+                    start_x = random.randrange(0, n)
+                    start_y = random.randrange(0, n)
+                    end_x = min(start_x + obstacle_square_size, n)
+                    end_y = min(start_y + obstacle_square_size, n)
+                    rewards[start_x:end_x, start_y:end_y] = 0
+                    obstacles_map[start_x:end_x, start_y:end_y] = True
+                    
+                    # Randomly create obstacle clusters
+                    if random.random() < obstacle_cluster_prob:
+                        cluster_size = random.randint(1, 3)  # Size of the cluster
+                        for _ in range(cluster_size):
+                            cx = min(start_x + random.randint(-2, 2), n-1)
+                            cy = min(start_y + random.randint(-2, 2), n-1)
+                            if 0 <= cx < n and 0 <= cy < n:
+                                obstacles_map[cx, cy] = True
+                                rewards[cx, cy] = 0
+
+        # Normalize rewards to sum to 1
+        total_sum = np.sum(rewards)
+        if total_sum != 0:
+            rewards = rewards / total_sum
+
+        # Check if all non-obstacle cells are reachable
+        if is_reachable(rewards, obstacles_map):
+            break  # If the map is valid, exit the loop and return the result
+        else:
+            print("Regenerating map: Non-obstacle cells are not fully reachable.")
+
+    return rewards, obstacles_map
+
+
 
 
 
