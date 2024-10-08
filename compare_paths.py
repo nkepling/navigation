@@ -13,7 +13,8 @@ from pytorch_value_iteration_networks.model import *
 import time
 
 
-def get_vin_path(vin, n, obstacle_map,rewards, start,goal):
+
+def get_vin_path(vin, n, obstacle_map,rewards, start,goal,k = 16):
 
 
     actions = {0:(0,-1),
@@ -37,7 +38,7 @@ def get_vin_path(vin, n, obstacle_map,rewards, start,goal):
 
         start = time.time()
 
-        logits,_ = vin(input,torch.tensor(agent_pos[0]),torch.tensor(agent_pos[1]),16)
+        logits,_ = vin(input,torch.tensor(agent_pos[0]),torch.tensor(agent_pos[1]),k)
 
         end = time.time() - start
 
@@ -68,7 +69,6 @@ def get_vin_path(vin, n, obstacle_map,rewards, start,goal):
     print("mean infrence time" ,np.mean(infrence_time))
     print("total time to reach goal", np.sum(infrence_time))
     return path
-        
 
 
 
@@ -188,7 +188,7 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
         plt.suptitle(f"Comparison of Paths (Seed: {seed})")
 
 
-    plt.savefig("images/" + f"{seed}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
+    plt.savefig("images/vin_vs_vi/" + f"{seed}"+"vin_comparison_success.png", format='png')  # Save the figure as a PNG file
     plt.show()
 
 
@@ -197,11 +197,17 @@ if __name__ == "__main__":
     from types import SimpleNamespace
 
 
-    seeds = np.random.randint(0,6000,100)
+    seeds = np.random.randint(6100,20000,10)
+    # seeds = [19836,8097,1695,12666,18101,19793,8360, 19836]
+    # random_fails = [12666, 8097, 10636, 17049, 16954, 19836, 17658, 10636, 17839, 16954]
+    # random_success = [15384, 15614, 8485, 11154, 10823, 18599, 11680, 19427, 10540, 9213]
+
+    # seeds = [6864, 12640, 10585, 14937, 14937, 15951, 15951]
+    # seeds = [14865, 14009, 16276, 12884, 17928, 9883, 11524, 17155, 13482, 17610]
     # seeds = [44,29,590,358]
 
-    with open('obstacle.pkl', 'rb') as f:
-        obstacles_map = pickle.load(f)
+    # with open('obstacle.pkl', 'rb') as f: 
+    #     obstacles_map = pickle.load(f)
 
 
     pnet = PNetResNet(2,128,128,8)
@@ -211,7 +217,7 @@ if __name__ == "__main__":
     cae_net_path = "model_weights/CAE_1.pth"
 
 
-    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/vin_full_traj.pth', weights_only=True)
+    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_all_obs_1.pth', weights_only=True,map_location=device)
 
     config = SimpleNamespace(k = 16, 
                             l_i = 2,
@@ -225,14 +231,27 @@ if __name__ == "__main__":
     vin.load_state_dict(vin_weights)
     vin.eval()
 
+    T = 30
+
+    min_obstacles = 2
+    max_obstacles = 20
+    n = 20
     for seed in seeds:
-        rewards, obstacles_map = init_map(n, "block", num_blocks, num_obstacles, obstacle_type, square_size,obstacle_map=obstacles_map,seed=seed)
+        square_size = random.randint(2,6)
+        num_blocks = random.randint(3,6)
+        # rewards, obstacles_map = init_map(n, "block", num_blocks, num_obstacles, obstacle_type, square_size,seed=seed)
+        rewards, obstacles_map = init_random_reachable_map(n, "block", num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=square_size, obstacle_map=None, seed=seed)
+        if np.sum(rewards) == 0:
+            continue
+        #rewards, obstacles_map = init_reachable_map(n, "block", num_blocks, num_obstacles, obstacle_type, seed=seed)
         neighbors = precompute_next_states(n, obstacles_map)
         start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+
+
         #model = UNetSmall()
         #model.load_state_dict(torch.load("model_weights/unet_small_7.pth",weights_only=True))
-        input = reformat_input(rewards, obstacles_map)
-        input = input.unsqueeze(0)
+        #input = reformat_input(rewards, obstacles_map)
+        #input = input.unsqueeze(0)
 
 
         #V= model(input).detach().numpy().squeeze()
@@ -240,15 +259,18 @@ if __name__ == "__main__":
         #Viter = value_iteration(n, rewards.copy(), obstacles_map, gamma,neighbors)
         #V_init = nn_initialized_vi(model,n, rewards.copy(), obstacles_map, gamma,neighbors)
 
-        #path1 = get_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal, model)
+        #path1 = get_nn_path(n, rewards.copy(), obstacles_map, nqeighbors, start, goal, model)
         path2 = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
         #path3 = get_vi_plus_nn_path(n, rewards.copy(), obstacles_map, neighbors, start, goal,model)q
         #path4 = get_heuristic_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
         #path5 = get_p_net_path(cae_net,cae_net_path,pnet,pnet_path,obstacles_map,rewards.copy(),start,goal)
-        path6 = get_vin_path(vin,10,obstacles_map,rewards.copy(),start,goal)
+        #path6 = get_vin_path(vin,10,obstacles_map,rewards.copy(),start,goal,k=16)
+        path7 = get_finite_vi_path(n,rewards.copy(),obstacles_map,neighbors,T,start,goal)
 
-        paths = [path2,path6]
+        
+
+        paths = [path2,path7]
         # titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET","VIN"]
-        titles = ["VI","VIN"]
+        titles = ["Infinite Horizon VI",f"Finite Horizon VI, T = {T} "]
 
         compare_paths(paths, rewards, obstacles_map, goal,seed=seed,titles=titles)

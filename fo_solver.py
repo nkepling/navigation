@@ -19,6 +19,34 @@ gamma = 0.8
 # define experiment configuration
 random_map = True
 
+def finite_horizon_value_iteration(n, rewards, obstacles, neighbors, T,gamma=1):
+    # Initialize the value function for all time steps
+    V = np.zeros((T + 1, n, n))  # V[t] represents the value function at time t
+    
+    # Iterate backward in time from T-1 to 0
+    for t in range(T - 1, -1, -1):  # Loop over time steps from T-1 to 0
+        for i in range(n):
+            for j in range(n):
+                if obstacles[i, j]:
+                    continue  # Skip obstacle cells
+                # Get the possible next states and rewards
+                v_hat = []
+                for s in neighbors[(i, j)]:
+                    v_hat.append(V[t + 1, s[0], s[1]])  # Use value function at time t+1
+
+                # Bellman update for time step t
+                V[t, i, j] = rewards[i, j] + gamma * max(v_hat, default=0)
+
+    # Return the value function at time 0 (V[0]) and all time steps if needed
+    return V[0], V
+
+
+
+
+
+
+
+
 # Function for Value Iteration
 def value_iteration(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
     # Initialize the value function

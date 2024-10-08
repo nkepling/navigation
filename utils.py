@@ -203,7 +203,8 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
             num_obstacles = random.randint(min_obstacles, max_obstacles)
 
             # Define obstacle diversity parameters
-            obstacle_square_size = random.randint(2, 5)  # Randomize obstacle size
+            obstacle_square_size = random.randint(1, 5)  # Randomize obstacle size
+            # obstacle_square_size = random.randint(1,2)
             obstacle_cluster_prob = 0.3  # Probability of forming obstacle clusters
             
             if obstacle_type == "random":
@@ -237,11 +238,18 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
         if total_sum != 0:
             rewards = rewards / total_sum
 
-        # Check if all non-obstacle cells are reachable
-        if is_reachable(rewards, obstacles_map):
-            break  # If the map is valid, exit the loop and return the result
+        # # Check if all non-obstacle cells are reachable
+        # if is_reachable(rewards, obstacles_map):
+        #     break  # If the map is valid, exit the loop and return the result
+        # else:
+        #     print("Regenerating map: Non-obstacle cells are not fully reachable.")
+
+        # Check that the agent is not in an obstacle cell
+
+        if obstacles_map[0, 0]:
+            print("Regenerating map: Agent is in an obstacle cell.")
         else:
-            print("Regenerating map: Non-obstacle cells are not fully reachable.")
+            break
 
     return rewards, obstacles_map
 

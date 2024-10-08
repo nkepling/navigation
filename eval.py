@@ -1,5 +1,5 @@
 from utils import *
-from fo_solver import value_iteration, extract_policy, visualize_policy_and_rewards, visualize_rewards, pick_start_and_goal
+from fo_solver import value_iteration, extract_policy, visualize_policy_and_rewards, visualize_rewards, pick_start_and_goal,finite_horizon_value_iteration
 from copy import deepcopy
 from nn_training import *
 import matplotlib.pyplot as plt
@@ -27,7 +27,30 @@ gamma = 0.8
 # define experiment configuration
 random_map = True
 
+def get_finite_vi_path(n, rewards, obstacles_map, neighbors, T, start, goal):
+    agent_position = deepcopy(start)
+    steps = 0
+    horizon = T
+    path = [agent_position]
+    reward_list = []
+    checker = LiveLockChecker(last_visited={}, counter=0)
 
+
+    while agent_position!=goal and horizon > 0:
+        rewards[agent_position[0], agent_position[1]] = 0
+        Viter,_ = finite_horizon_value_iteration(n, rewards, obstacles_map, neighbors, horizon)
+        policy = extract_policy(Viter, obstacles_map,neighbors,n=n)
+        next_position = tuple(int(i) for i in policy[agent_position])
+        checker.update(agent_position, next_position)
+        if checker.check(agent_position, next_position):
+            break
+        agent_position = next_position
+        path.append(agent_position)
+        reward_list.append(rewards)
+        steps += 1
+        horizon -= 1
+        
+    return path
 
 def get_nn_path(n, rewards, obstacles_map, neighbors, start, goal, model):
     agent_position = deepcopy(start)
@@ -58,7 +81,7 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
         rewards[agent_position[0], agent_position[1]] = 0
 
         Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
-        policy = extract_policy(Viter, obstacles_map,neighbors)
+        policy = extract_policy(Viter, obstacles_map,neighbors,n=n)
         next_position = tuple(int(i) for i in policy[agent_position])
         checker.update(agent_position, next_position)
         if checker.check(agent_position, next_position):
