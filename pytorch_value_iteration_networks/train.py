@@ -87,7 +87,7 @@ def train(net: VIN, trainloader, testloader,config, criterion, optimizer):
             # Zero the parameter gradients
             optimizer.zero_grad()
             # Forward pass
-            outputs, predictions = net(X, S1, S2, config.k)
+            outputs, predictions, vals = net(X, S1, S2, config.k)
             # Loss
             loss = criterion(outputs, labels)
             # Backward pass
@@ -133,7 +133,7 @@ def validate(net: VIN, valloader, config, criterion):
             continue  # Drop those data, if not enough for a batch
         net = net.to(device)
         # Forward pass
-        outputs, predictions = net(X, S1, S2, config.k)
+        outputs, predictions,vals = net(X, S1, S2, config.k)
 
         loss = criterion(outputs, labels)
 
@@ -166,7 +166,7 @@ def test(net: VIN, testloader, config):
             continue  # Drop those data, if not enough for a batch
         net = net.to(device)
         # Forward pass
-        outputs, predictions = net(X, S1, S2, config.k)
+        outputs, predictions,vals = net(X, S1, S2, config.k)
         # Select actions with max scores(logits)
         _, predicted = torch.max(outputs, dim=1, keepdim=True)
         # Unwrap autograd.Variable to Tensor
@@ -196,9 +196,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '--datafile',
         type=str,
-        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/diverse_traj.npz',
+        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/20by20.npz',
         help='Path to data file')
-    parser.add_argument('--imsize', type=int, default=10, help='Size of image')
+    parser.add_argument('--imsize', type=int, default=20, help='Size of image')
     parser.add_argument(
         '--lr',
         type=float,
@@ -207,7 +207,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--epochs', type=int, default=300, help='Number of epochs to train')
     parser.add_argument(
-        '--k', type=int, default=16, help='Number of Value Iterations')
+        '--k', type=int, default=50, help='Number of Value Iterations')
     parser.add_argument(
         '--l_i', type=int, default=2, help='Number of channels in input layer')
     parser.add_argument(
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     config = parser.parse_args()
     # Get path to save trained model
     # save_path = "trained/vin_{0}x{0}.pth".format(config.imsize)
-    save_path = "trained/vin_all_obs_1.pth"
+    save_path = "trained/vin_20x20_k_50.pth"
     # Instantiate a VIN model
     net = VIN(config)
     # Loss

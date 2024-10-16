@@ -185,6 +185,8 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
     while True:  # Loop until we generate a valid map
         rewards = np.zeros((n, n))
         obstacles_map = np.zeros((n, n), dtype=bool)
+        num_blocks = np.random.randint(3,6)
+        square_size = random.randint(2,8)
 
         if config == "block":
             for _ in range(num_blocks):

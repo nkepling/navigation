@@ -71,4 +71,4 @@ class VIN(nn.Module):
 
         logits = self.fc(q_out)  # q_out to actions
 
-        return logits, self.sm(logits)
+        return logits, self.sm(logits), v

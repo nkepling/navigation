@@ -11,21 +11,21 @@ import fo_solver
 
 
 # Define the input map
-n = 10  # size of the grid
+n = 20  # size of the grid
 config = "block"  # distribution of positive probability cells
 num_blocks = 3  # number of positive region blocks
 # num_obstacles = 3  # number of obstacles
 obstacle_type = "block"
 square_size = 4  # size of the positive region square
 
-min_obstacles = 0 
-max_obstacles = 6
+min_obstacles = 2
+max_obstacles = 20
 
 # Discount factor
-gamma = 0.8
+gamma = 0.9
 
 # define experiment configuration
-random_map = True
+# random_map = True
 
 
 
@@ -48,7 +48,7 @@ def get_full_trajectory(n, rewards, obstacles_map, neighbors, start):
         
         # Run value iteration to get the value function and policy
         V = value_iteration(n, rewards, obstacles_map, gamma, neighbors)
-        policy = extract_policy(V, obstacles_map, neighbors)
+        policy = extract_policy(V, obstacles_map, neighbors,n)
         
         # Update agent's position based on the policy
         next_position = tuple(int(i) for i in policy[agent_position])
@@ -106,9 +106,9 @@ Generate dataset for training the VIN model.  The inputs are images whre one cha
 The reward image encodes both the obstacles and the rewards map.
 """
 
-def vin_data(n_rewards, seeds, num_reward_variants=10):
-    with open("obstacle.pkl", "rb") as f:
-        obstacle_map = pickle.load(f)
+def vin_data(n_rewards, seeds,num_reward_variants=7):
+    # with open("obstacle.pkl", "rb") as f:
+    #     obstacle_map = pickle.load(f)
 
     X = []
     S1 = []
@@ -117,6 +117,8 @@ def vin_data(n_rewards, seeds, num_reward_variants=10):
 
     with tqdm.tqdm(total=len(seeds)) as pbar_obs:  # Corrected `seeds` for progress bar
         for seed in seeds:
+
+
             # Generate a fixed obstacle map for the seed
             reward, obstacle_map = init_random_reachable_map(n, "block", num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=None, seed=seed)
             neighbors = precompute_next_states(n , obstacle_map)  # Using `n` instead of hardcoded 10 for consistency
@@ -205,15 +207,15 @@ if __name__ == "__main__":
 
     num_trajectories = 3 # number of trajectories to sample from each reward map
     #n_rewards = 3 # numerb of reward maps to generate
-    n_train = 10000
-    n_test = 2400
+    n_train = 5000
+    n_test = 2000
     #n_rewards = 3
 
     train_seeds = [x for x in range(n_train)]
     test_seeds = [x for x in range(n_train+1,n_test+n_train)]
 
 
-    save_path = "training_data/diverse_traj.npz"
+    save_path = "training_data/20by20.npz"
     X,S1,S2,Labels = main(n_train,n_test,save_path,train_seeds,test_seeds)
     # X,S1,S2,Labels = vin_data(num_trajectories,n_rewards)
 
