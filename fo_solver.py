@@ -19,6 +19,10 @@ gamma = 0.8
 # define experiment configuration
 random_map = True
 
+
+
+
+
 def finite_horizon_value_iteration(n, rewards, obstacles, neighbors, T,gamma=1):
     # Initialize the value function for all time steps
     V = np.zeros((T + 1, n, n))  # V[t] represents the value function at time t
@@ -39,8 +43,6 @@ def finite_horizon_value_iteration(n, rewards, obstacles, neighbors, T,gamma=1):
 
     # Return the value function at time 0 (V[0]) and all time steps if needed
     return V[0], V
-
-
 
 
 
@@ -212,6 +214,44 @@ def visualize_rewards(rewards, obstacles, start, goal, curr_pos=None, next_pos=N
     ax.invert_yaxis()
     ax.grid(True)
     plt.show()
+
+
+def visualize_values(value_map, obstacles, start, goal, curr_pos=None):
+    """
+    Visualize the value map with obstacles, start, goal, and current position (without arrows).
+    
+    Args:
+        value_map (np.ndarray): 2D array representing the value of each grid cell.
+        obstacles (np.ndarray): 2D binary array where 1 indicates an obstacle.
+        start (tuple): Coordinates of the start position (row, col).
+        goal (tuple): Coordinates of the goal position (row, col).
+        curr_pos (tuple, optional): Coordinates of the current position (row, col). Default is None.
+    """
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Prepare the display matrix with NaN for obstacles
+    display_matrix = np.copy(value_map)
+    display_matrix[obstacles] = np.nan  # Set obstacles to NaN for black color
+
+    # Plot the value map with viridis colormap
+    im = ax.imshow(display_matrix, cmap='viridis', origin='upper')
+    ax.set_title("Value Map with Obstacles, Start, Goal, and Agent")
+    fig.colorbar(im, ax=ax)
+
+    # Plot start and goal positions
+    ax.plot(start[1], start[0], 'bo', label='Start')  # Start in blue
+    ax.plot(goal[1], goal[0], 'go', label='Goal')    # Goal in green
+
+    # Plot current position if provided
+    if curr_pos is not None:
+        ax.plot(curr_pos[1], curr_pos[0], 'ro', markersize=10, label='Current')  # Current position in red
+
+    # Adjust plot settings
+    ax.invert_yaxis()
+    ax.grid(True)
+    ax.legend(loc='upper right')
+    plt.show()
+
 
 if __name__ == "__main__":
     import torch

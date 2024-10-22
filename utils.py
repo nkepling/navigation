@@ -20,6 +20,33 @@ and size n as inputs
 # random_map = None
 # gamma = None
 
+def create_density_based_reward_map(rewards, decay_factor=0.5, radius=3):
+    """
+    Create a reward map that emphasizes reward density.
+
+    Args:
+        rewards (np.ndarray): Original reward map.
+        decay_factor (float): Factor to decay reward values based on distance.
+        radius (int): Radius around each reward to enhance density.
+
+    Returns:
+        density_rewards (np.ndarray): Density-based reward map.
+    """
+    n = rewards.shape[0]
+    density_rewards = np.zeros_like(rewards)
+
+    for i in range(n):
+        for j in range(n):
+            if rewards[i, j] > 0:
+                # Add decayed rewards to nearby cells
+                for dx in range(-radius, radius + 1):
+                    for dy in range(-radius, radius + 1):
+                        ni, nj = i + dx, j + dy
+                        if 0 <= ni < n and 0 <= nj < n:
+                            distance = abs(dx) + abs(dy)
+                            density_rewards[ni, nj] += rewards[i, j] * (decay_factor ** distance)
+
+    return density_rewards
 
 
 

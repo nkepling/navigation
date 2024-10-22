@@ -90,7 +90,9 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
         path.append(agent_position)
         reward_list.append(rewards)
         steps += 1
-    return path
+
+    path_list = [(x,"vi") for x in path]
+    return path_list
 
 
 def get_vi_plus_nn_path(n, rewards, obstacles_map, neighbors, start, goal,model):
