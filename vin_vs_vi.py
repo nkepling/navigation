@@ -15,8 +15,10 @@ import pandas as pd
 from types import SimpleNamespace
 import seaborn as sns
 from queue import Queue
-from compare_paths import *
 
+from puct import PUCT
+from modified_gridenv import ModifiedGridEnvironment
+from tabluar_puct import tabPUCT
 
 # Ensure the plot style is set
 sns.set(style="whitegrid")
@@ -90,7 +92,7 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
     checker = LiveLockChecker(counter=0, last_visited={})
     agent_pos = deepcopy(start)
     path = [agent_pos]
-    max_step = 100
+    max_step = 1000
     step = 0
     inference_time = []
 
@@ -102,7 +104,7 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
 
         start_time = time.time()
 
-        logits, _ ,_= vin(input, torch.tensor(agent_pos[0]), torch.tensor(agent_pos[1]), 50)
+        logits, _ ,_= vin(input.to(device), torch.tensor(agent_pos[0]).to(device), torch.tensor(agent_pos[1]).to(device), 50)
 
         inference_duration = time.time() - start_time
         inference_time.append(inference_duration)
@@ -114,7 +116,7 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
 
         checker.update(agent_pos, new_pos)
         if checker.check(agent_pos, new_pos):
-            print("Live Lock Detected")
+            print("Live Lock Detected in VIN")
             return path, False, np.mean(inference_time), len(path), "Live Lock Detected"
         
         if obstacle_map[new_pos[0], new_pos[1]]:
@@ -138,7 +140,7 @@ def get_vi_path(n, rewards, obstacle_map, neighbors, start, goal):
     agent_pos = deepcopy(start)
     checker = LiveLockChecker(counter=0, last_visited={})
     path = [agent_pos]
-    max_step = 100
+    max_step = 1000
     step = 0
     inference_time = []
 
@@ -251,6 +253,57 @@ def get_vin_path_with_value_hueristic(vin, n, obstacle_map,rewards, start,goal,k
         return path, False, np.mean(infrence_time), len(path), "Max Steps Reached",
 
 
+
+def get_puct_path(vin, config, obstacle_map, rewards, start, goal, k=50, max_steps=10000, gamma=1, c_puct=1.44):
+    actions = {0: (0, -1), 1: (1, 0), 2: (0, 1), 3: (-1, 0)}  # up, right, down, left
+    checker = LiveLockChecker(counter=0, last_visited={})
+    agent_pos = deepcopy(start)
+    path = [agent_pos]
+    inference_times = []
+    step = 0
+    success = False
+    reason = "Max Steps Reached"  # Default reason if no other termination condition met
+    env = ModifiedGridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal, living_reward=None, max_steps=1000)
+    puct = PUCT(vin, env, agent_pos, gamma=gamma, c_puct=c_puct,alpha=0.15,epsilon=0)
+    # puct = tabPUCT(vin, env, agent_pos, gamma=gamma, c_puct=c_puct,k=50,alpha=0.15,epsilon=0)
+    # puct = 
+    while agent_pos != goal and step < max_steps:
+        rewards[agent_pos[0], agent_pos[1]] = 0
+        # env = GridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal, max_steps=1000,living_reward=-0.01)   
+        
+        # Timing the inference
+        start_time = time.time()
+        action, new_position = puct.search(agent_pos,rewards.copy(),num_simulations=150)
+        inference_time = time.time() - start_time
+        inference_times.append(inference_time)
+        puct.update_root(action)
+        
+        # Update for potential live-lock
+        checker.update(agent_pos, new_position)
+        if checker.check(agent_pos, new_position):
+            reason = "Live Lock Detected in PUCT"
+            print(reason)
+            break
+
+        if obstacle_map[new_position[0], new_position[1]]:
+            reason = "Agent moved into an obstacle, PUCT"
+            print(reason)
+            return path, False, np.mean(inference_times), len(path), reason
+
+        path.append(new_position)
+        agent_pos = new_position
+        step += 1
+
+    # Check if the goal was reached
+    success = agent_pos == goal
+    if success:
+        reason = "Goal Reached"
+
+    # Calculate mean and total inference time
+    mean_inference_time = np.mean(inference_times)
+
+    return path, success, mean_inference_time, len(path), reason
+
 def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,titles=None):
     num_paths = len(paths)
     fig, ax = plt.subplots(1, num_paths, figsize=(14, 10))  # Adjust figure size based on number of value functions
@@ -283,17 +336,19 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
         plt.suptitle(f"Comparison of Paths (Seed: {seed})")
 
 
-    #plt.savefig("images/" + f"{seed}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
-    plt.show()
+    plt.savefig("images/puct" + f"{seed}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
+    # plt.show()
 
 
 
 if __name__ == "__main__":
+    import argparse
 
     successful_paths = []
     failed_paths = []
     n = 20
-    seeds = np.random.randint(6100, 20000, 300)
+    seeds = np.random.randint(6100, 20000, 100)
+    # seeds = [9651]
 
     pnet = PNetResNet(2, 128, 128, 8)
     pnet_path = "model_weights/pnet_resnet_2.pth"
@@ -302,9 +357,44 @@ if __name__ == "__main__":
     cae_net_path = "model_weights/CAE_1.pth"
 
     vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True, map_location=device)
-    config = SimpleNamespace(k=50, l_i=2, l_q=4, l_h=150, imsize=20, batch_sz=1)
+ 
+
+    parser = argparse.ArgumentParser()
+
+    ### Gridworld parameters
+
+    parser.add_argument('--n', type=int, default=20, help='Grid size')
+    parser.add_argument('--obstacle_shape', type=str, default="block", help='Shape of obstacles')
+    parser.add_argument('--num_obstacles', type=int, default=5, help='Number of obstacles')
+    parser.add_argument('--min_obstacles', type=int, default=2, help='Minimum obstacles')
+    parser.add_argument('--max_obstacles', type=int, default=10, help='Maximum obstacles')
+    parser.add_argument('--obstacle_type', type=str, default="block", help='Type of obstacles')
+    parser.add_argument('--square_size', type=int, default=25, help='Size of the grid square')
+    parser.add_argument('--obstacle_map', default=None, help='Initial obstacle map')
+    #parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--num_reward_blocks', type=tuple, default=(2, 5), help='Range of reward blocks')
+    parser.add_argument('--reward_square_size', type=tuple, default=(4, 6), help='Size of reward squares')
+    parser.add_argument('--obstacle_cluster_prob', type=float, default=0.3, help='Probability of obstacle clustering')
+    parser.add_argument('--obstacle_square_sizes', type=tuple, default=(3, 8), help='Range of obstacle square sizes')
+    parser.add_argument('--living_reward', type=float, default=-0.1, help='Living reward for each step')
+
+      
+    # VIN-specific parameters
+    parser.add_argument('--k', type=int, default=50, help='Number of Value Iterations')
+    parser.add_argument('--l_i', type=int, default=2, help='Number of channels in input layer')
+    parser.add_argument('--l_h', type=int, default=150, help='Number of channels in first hidden layer')
+    parser.add_argument('--l_q', type=int, default=4, help='Number of channels in q layer (~actions) in VI-module')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs to train')
+    parser.add_argument('--batch_sz', type=int, default=1, help='Batch size')
+
+    config = parser.parse_args()
+
+
+
     vin = VIN(config)
     vin.load_state_dict(vin_weights)
+
+    vin.to(device)
     vin.eval()
 
     for seed in seeds:
@@ -355,22 +445,24 @@ if __name__ == "__main__":
         })
         results_df = pd.concat([results_df, new_row_vin], ignore_index=True)
 
-        path_heuristic,success_heuristic, mean_inf_time_heuristic, total_steps_heuristic,reason = get_vin_path_with_value_hueristic(vin, 20, obstacles_map, rewards.copy(), start, goal, k=50)
+        path_puct, success_puct, mean_inf_time_puct, total_steps_puct,reason = get_puct_path(vin,config,obstacles_map,rewards.copy(),start,goal,gamma=0.99,c_puct=1.4)
 
-
-        new_row_heuristic = pd.DataFrame({
+        new_row_puct = pd.DataFrame({
             'seed': [seed],
-            'algorithm': ['Huertistic'],
-            'mean_inference_time': [mean_inf_time_heuristic],
-            'total_steps': [total_steps_heuristic],
-            'successful': [success_heuristic],
-            'path': [path_heuristic],
+            'algorithm': ['PUCT'],
+            'mean_inference_time': [mean_inf_time_puct],
+            'total_steps': [total_steps_puct],
+            'successful': [success_puct],
+            'path_puct': [path_puct],
             'stop_reason': [reason]
         })
 
-        results_df = pd.concat([results_df, new_row_heuristic], ignore_index=True)
+        results_df = pd.concat([results_df, new_row_puct], ignore_index=True)
+
+
+
     # Save the results to a CSV file if needed
-    results_df.to_csv('path_results.csv', index=False)
+    results_df.to_csv('path_results_3.csv', index=False)
 
     # Print the DataFrame for quick view
 

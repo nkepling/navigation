@@ -6,7 +6,7 @@ import pickle
 from copy import deepcopy
 
 # Define the input map
-n = 10  # size of the grid
+n = 50  # size of the grid
 config = "block"  # distribution of positive probability cells
 num_blocks = 3  # number of positive region blocks
 num_obstacles = 3  # number of obstacles
@@ -19,8 +19,136 @@ gamma = 0.8
 # define experiment configuration
 random_map = True
 
+def get_fov(cur_state, next_state, obstacles, map_shape, fov_range=10, fov_angle=60):
+    """
+    """
+    def bresenham_line(start, end):
+        """Bresenham's Line Algorithm to generate points between start and end."""
+        x0, y0 = start
+        x1, y1 = end
+        points = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            points.append((x0, y0))
+            if (x0, y0) == (x1, y1):
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+
+        return points
+
+    # Calculate the orientation vector and normalize it
+    orientation = np.array(next_state) - np.array(cur_state)
+    orientation = orientation / np.linalg.norm(orientation)
+
+    # Generate the grid of cell coordinates around the current state
+    x, y = np.meshgrid(
+        np.arange(max(0, cur_state[0] - fov_range), min(map_shape[0], cur_state[0] + fov_range + 1)),
+        np.arange(max(0, cur_state[1] - fov_range), min(map_shape[1], cur_state[1] + fov_range + 1))
+    )
+    grid_points = np.stack([x.ravel(), y.ravel()], axis=-1)
+
+    # Calculate vectors from cur_state to each point in the grid
+    vectors = grid_points - np.array(cur_state)
+
+    # Compute distances to filter based on the range
+    distances = np.linalg.norm(vectors, axis=1)
+    in_range_mask = distances <= fov_range
+
+    # Normalize the vectors
+    unit_vectors = vectors / np.clip(distances[:, None], a_min=1e-8, a_max=None)
+
+    # Compute dot products with the orientation vector
+    dot_products = np.dot(unit_vectors, orientation)
+
+    # Calculate angles and mask those within the FOV angle
+    angles = np.degrees(np.arccos(np.clip(dot_products, -1.0, 1.0)))
+    in_fov_mask = angles <= fov_angle / 2
+
+    # Combine range and FOV angle masks
+    mask = in_range_mask & in_fov_mask
+
+    # Apply mask to grid points
+    fov_cells = grid_points[mask]
+
+    # Filter cells using Bresenham's line algorithm to stop at obstacles
+    visible_cells = []
+    for cell in fov_cells:
+        line = bresenham_line(cur_state, cell)
+        # Check each point in the line for obstacles
+        blocked = False
+        for point in line:
+            if obstacles[point[0], point[1]]:
+                blocked = True
+                break
+        if not blocked:
+            visible_cells.append(tuple(cell))
+
+    return visible_cells
 
 
+
+def get_fov_rewards(cur_sate,next_state,reward_array,obstacles):
+    """Given the field of view array and the reward array, return the sum of rewards in the field of view.
+    """
+    fov_array = get_fov(cur_sate,next_state,obstacles,obstacles.shape)
+    
+    fov_array = np.array(fov_array)
+    return np.sum(reward_array[fov_array[:,0],fov_array[:,1]])
+    
+
+
+
+
+
+
+def value_iteration_with_extened_fov(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
+    """Value iteration with extended field of view (FOV)
+    
+    The agent can observe reward in a cone directly in front of it.
+
+    Here you have to account for  the reward you get from each direction going into cell. 
+
+    So rather than simply R(s,a) it is R(s,a,s'). 
+    """
+
+    V = np.zeros((n, n))
+    loops = 0
+    while True:
+        delta = 0
+        for i in range(n):
+            for j in range(n):
+                if obstacles[i, j]:
+                    continue  # Skip obstacle cells
+                v = V[i, j]
+                # Get the possible next states and rewards
+                next_states = []
+                v_hat = []
+                for s in neighbors[(i, j)]:
+                    r = get_fov_rewards((i,j),s,rewards,obstacles)
+                    v_hat.append(r + gamma * V[s[0], s[1]])
+
+                # Bellman update
+                #V[i, j] = rewards[i,j] + gamma * max(v_hat, default=0)
+                V[i, j] = max(v_hat, default=0)
+                delta = max(delta, abs(v - V[i, j])) # This works because we are looking for max difference
+
+        loops += 1
+        if delta < threshold:
+            break
+    return V
+
+    
 
 
 def finite_horizon_value_iteration(n, rewards, obstacles, neighbors, T,gamma=1):
@@ -45,14 +173,11 @@ def finite_horizon_value_iteration(n, rewards, obstacles, neighbors, T,gamma=1):
     return V[0], V
 
 
-
-
-
-
 # Function for Value Iteration
 def value_iteration(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
     # Initialize the value function
     V = np.zeros((n, n))
+    loops = 0
     while True:
         delta = 0
         for i in range(n):
@@ -69,13 +194,15 @@ def value_iteration(n, rewards, obstacles, gamma,neighbors,threshold=1e-6):
                 # Bellman update
                 V[i, j] = rewards[i, j] + gamma * max(v_hat, default=0)
                 delta = max(delta, abs(v - V[i, j])) # This works because we are looking for max difference
+
+        loops += 1
         if delta < threshold:
             break
     return V
 
 
 # Function to extract the policy
-def extract_policy(V, obstacles,neighbors,n=10):
+def extract_policy(V, obstacles,neighbors,n):
     policy = np.zeros((n, n, 2))
 
     for i in range(n):
@@ -290,7 +417,8 @@ if __name__ == "__main__":
     while agent_position!=goal:
         # mark current position as 0 reward
         rewards[agent_position[0], agent_position[1]] = 0
-        V = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
+        # V = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
+        V = value_iteration_with_extened_fov(n,rewards,obstacles_map,gamma,neighbors)
         policy = extract_policy(V, obstacles_map,neighbors)
         next_position = tuple(int(i) for i in policy[agent_position])
         print("Agent next state is {}".format(next_position))

@@ -4,7 +4,7 @@ Utility File
 import numpy as np
 import random
 import yaml
-
+import scipy 
 import torch
 """
 Takes config: single double random
@@ -19,6 +19,7 @@ and size n as inputs
 # square_size = None
 # random_map = None
 # gamma = None
+
 
 def create_density_based_reward_map(rewards, decay_factor=0.5, radius=3):
     """
@@ -49,6 +50,29 @@ def create_density_based_reward_map(rewards, decay_factor=0.5, radius=3):
     return density_rewards
 
 
+def convolutional_density_filter(rewards, filter_size=3,decay_factor=0.5):
+    """
+    """
+    kernel = np.ones((filter_size, filter_size)) 
+    kernel[filter_size // 2, filter_size // 2] = 1 # Center cell has full reward
+
+    for i in range(filter_size):
+        for j in range(filter_size):
+            distance = abs(i - filter_size // 2) + abs(j - filter_size // 2)
+            kernel[i, j] = (decay_factor ** distance)
+
+    
+
+    # Convolve the rewards with the kernel
+    filtered_rewards = scipy.signal.convolve2d(rewards, kernel,mode='same')
+
+    return filtered_rewards
+
+def gaussian_density_filter(rewards, sigma=1.0):
+
+    filtered_rewards = scipy.ndimage.gaussian_filter(rewards, sigma=sigma)
+
+    return filtered_rewards
 
 
 def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square_size=10,obstacle_map=None,seed=None):
@@ -110,9 +134,6 @@ def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square
     return rewards, obstacles_map
 
 
-import numpy as np
-import random
-from collections import deque
 
 def is_reachable(rewards, obstacles_map):
     """
@@ -204,7 +225,19 @@ def init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type="bloc
     return rewards, obstacles_map
 
 
-def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=None, seed=None):
+def init_random_reachable_map(n, 
+                              config, 
+                              num_blocks, 
+                              min_obstacles, 
+                              max_obstacles, 
+                              obstacle_type="block", 
+                              square_size=10, 
+                              obstacle_map=None, 
+                              seed=None,
+                              num_reward_blocks=(3,6),
+                              reward_square_size=(2,8),
+                              obstacle_cluster_prob=0.3,
+                              obstacle_square_sizes=(1,5)):
     if seed:
         np.random.seed(seed)
         random.seed(seed)
@@ -212,8 +245,8 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
     while True:  # Loop until we generate a valid map
         rewards = np.zeros((n, n))
         obstacles_map = np.zeros((n, n), dtype=bool)
-        num_blocks = np.random.randint(3,6)
-        square_size = random.randint(2,8)
+        num_blocks = np.random.randint(num_reward_blocks[0],num_reward_blocks[1])
+        square_size = random.randint(reward_square_size[0],reward_square_size[1])
 
         if config == "block":
             for _ in range(num_blocks):
@@ -232,7 +265,7 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
             num_obstacles = random.randint(min_obstacles, max_obstacles)
 
             # Define obstacle diversity parameters
-            obstacle_square_size = random.randint(1, 5)  # Randomize obstacle size
+            obstacle_square_size = random.randint(obstacle_square_sizes[0], obstacle_square_sizes[1])  # Randomize obstacle size
             # obstacle_square_size = random.randint(1,2)
             obstacle_cluster_prob = 0.3  # Probability of forming obstacle clusters
             
@@ -276,7 +309,7 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
         # Check that the agent is not in an obstacle cell
 
         if obstacles_map[0, 0]:
-            print("Regenerating map: Agent is in an obstacle cell.")
+            continue
         else:
             break
 
@@ -287,10 +320,11 @@ def init_random_reachable_map(n, config, num_blocks, min_obstacles, max_obstacle
 
 
 
-"""
-Precompute the set of adjacent states for each state
-"""
+
 def precompute_next_states(n, obstacles):
+    """
+    Precompute the set of adjacent states for each state: 
+    """
     next_states = {}
     for i in range(n):
         for j in range(n):
@@ -308,7 +342,50 @@ def precompute_next_states(n, obstacles):
     return next_states
 
 
-import random
+def precompute_next_states(n, obstacles,num_actions=4):
+    """Computes next states for 8 directions.
+    """
+
+    if num_actions == 4:
+        next_states = {}
+        for i in range(n):
+            for j in range(n):
+                if obstacles[i, j]:
+                    continue
+                next_states[(i, j)] = []
+                if i > 0 and not obstacles[i-1, j]:
+                    next_states[(i, j)].append((i-1, j))
+                if i < n-1 and not obstacles[i+1, j]:
+                    next_states[(i, j)].append((i+1, j))
+                if j > 0 and not obstacles[i, j-1]:
+                    next_states[(i, j)].append((i, j-1))
+                if j < n-1 and not obstacles[i, j+1]:
+                    next_states[(i, j)].append((i, j+1))
+        return next_states
+    
+    elif num_actions == 8:
+        next_states = {}
+        # Define all 8 possible directions
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1),  # Up, Down, Left, Right
+                    (-1, -1), (-1, 1), (1, -1), (1, 1)]  # Diagonals
+
+        for i in range(n):
+            for j in range(n):
+                if obstacles[i, j]:
+                    continue
+                next_states[(i, j)] = []
+                # Check each possible direction
+                for di, dj in directions:
+                    ni, nj = i + di, j + dj
+                    if 0 <= ni < n and 0 <= nj < n and not obstacles[ni, nj]:
+                        next_states[(i, j)].append((ni, nj))
+                        
+        return next_states
+
+    else:
+        raise ValueError("Invalid number of actions. Must be 4 or 8.")
+
+
 
 # randomly pick a start and goal positions
 # Sample a target from the positive reward cells

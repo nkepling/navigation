@@ -76,12 +76,16 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
     steps = 0
     path = [agent_position]
     reward_list = []
+    time_list = []
     checker = LiveLockChecker(last_visited={}, counter=0)
     while agent_position!=goal:
         rewards[agent_position[0], agent_position[1]] = 0
-
+        start_time = time.time()
         Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
-        policy = extract_policy(Viter, obstacles_map,neighbors,n=n)
+        policy = extract_policy(Viter, obstacles_map,neighbors,n)
+        end_time = time.time()
+        print(f"Time for VI is {end_time - start_time}")
+        time_list.append(end_time - start_time)
         next_position = tuple(int(i) for i in policy[agent_position])
         checker.update(agent_position, next_position)
         if checker.check(agent_position, next_position):
@@ -92,7 +96,9 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
         steps += 1
 
     path_list = [(x,"vi") for x in path]
-    return path_list
+    print(f"mean time for VI is {np.mean(time_list)}")
+    print("num steps ",steps)    
+    return path_list, np.mean(time_list),steps
 
 
 def get_vi_plus_nn_path(n, rewards, obstacles_map, neighbors, start, goal,model):

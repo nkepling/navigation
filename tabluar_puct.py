@@ -24,8 +24,18 @@ def softmax(logits):
     exp_logits = np.exp(logits - max_logit)  # Subtract max logit to prevent overflow
     return exp_logits / np.sum(exp_logits)
 
+
+
+def encode_state(env, state_coords):
+        """Encode the state and reward map as a hashable key."""
+        rewards = env.get_rewards()
+        hasher = hashlib.md5()
+        hasher.update(rewards.tobytes())
+        hasher.update(str(state_coords).encode('utf-8'))
+        return hasher.hexdigest()
+
 class UCTNode:
-    def __init__(self, reward, coords = (0,0), prior_prob=0, parent=None,action=None,depth=0,val_init=0):
+    def __init__(self, state_hash, reward, coords = (0,0), prior_prob=0, parent=None,action=None,depth=0,val_init=0):
         self.visits = 0  # N(s,a) in PUCT
         self.init_value = 0 
         self.value_sum = 0  # W(s,a) - cumulative value
@@ -38,6 +48,8 @@ class UCTNode:
 
         self.reward = reward # instantaneous reward
         self.val_init =  val_init # prediced value of the state
+
+        self.state_hash = state_hash
 
     def update(self, value):
         """Update the node with new value."""
@@ -53,22 +65,32 @@ class UCTNode:
     def get_children(self):
         """Return all child nodes."""
         return self.children
-
-    def expand(self, action_probs, valid_next_states,next_state_value,next_state_rewards):
+    
+    def expand(self, action_probs, valid_next_states, next_state_value, next_state_rewards, env):
         """Expand the node by creating child nodes for each possible action."""
-
         for action, prob in action_probs.items():
             if action in valid_next_states:
                 child_coords = valid_next_states[action]
                 assert isinstance(child_coords, tuple), f"child_coords is {child_coords}"
-                reward = next_state_rewards[action] # next state immediate reward
-                self.children[action] = UCTNode(reward,coords=child_coords, prior_prob=prob, parent=self,action=action,depth=self.depth+1,val_init=next_state_value[action])
-
+                reward = next_state_rewards[action]  # next state immediate reward
+                # Generate a unique hash for the child state
+                state_hash = encode_state(env, child_coords)
+                # Create a child node with the unique state hash
+                self.children[action] = UCTNode(
+                    state_hash=state_hash,
+                    reward=reward,
+                    coords=child_coords,
+                    prior_prob=prob,
+                    parent=self,
+                    action=action,
+                    depth=self.depth + 1,
+                    val_init=next_state_value[action]
+                )
     def is_leaf(self):
         """Check if the node is a leaf node (no children)."""
         return len(self.children) == 0
     
-class PUCT:
+class tabPUCT:
     def __init__(self, vin_model, env:GridEnvironment, start, gamma, c_puct=1.0, k=50,alpha=0.15,epsilon=0.25):
         self.vin_model = vin_model  # Value Iteration Network to get values and logits
         self.env = env  # The grid environment instance
@@ -84,39 +106,40 @@ class PUCT:
 
         vin_model.to(self.device)
 
-   
+        self.gamma = gamma
         # add dirichlet noise to the prior probabilities to encourage exploration
 
         self.alpha = alpha
         self.epsilon = epsilon
-        self.gamma = gamma
+
+        self.Q = defaultdict(float)  # Q(s,a) - cumulative value/running average
+        self.N = defaultdict(int)  # N(s,a) - visit count
+        self.W = defaultdict(float)  # W(s,a) - cumulative value
+        self.P = defaultdict(float)  # P(s,a) - prior probability from VIN logits
 
 
-
-
+    def _update_tables(self, state_coords, action, value):
+        """Update Q, N, and W tables for a given state-action pair."""
+        state_action_hash = (encode_state(self.env,state_coords), action)
+        self.N[state_action_hash] += 1
+        self.W[state_action_hash] += value
+        self.Q[state_action_hash] = self.W[state_action_hash] / self.N[state_action_hash]
     
+
     def search(self,root_coords,init_reward,num_simulations):
         """Run multiple simulations to build the tree.
         satrt: the start state of the agent (coords)
         """
-
-
-        logits,preds,value = self._evaluate(UCTNode(reward=0,coords=root_coords))
+        logits,preds,value = self._evaluate(UCTNode(state_hash=encode_state(self.env,root_coords),reward=0,coords=root_coords))
         val_init = value[0,0,root_coords[0],root_coords[1]]
-        self.root = UCTNode(reward=0,coords=root_coords,val_init=val_init)  # Root node of the tree
+        self.root = UCTNode(state_hash=encode_state(self.env,root_coords),reward=0,coords=root_coords,val_init=val_init)  # Root node of the tree
 
         for _ in range(num_simulations):
-            # self.c_puct = max(0.5, self.c_puct * 0.99) 
-            path_memory = defaultdict(int)
-
-            
             node = self.root
             self.env.reset(node.coords,init_reward)
             # Traverse the tree until we reach a leaf node
             while not node.is_leaf():
-                state_hash = self.env.encode_state(node.coords)
-                path_memory[state_hash] += 1
-                node = self._select(node, path_memory)
+                node = self._select(node)
 
             # Expand and evaluate the leaf node
             value = self._expand_and_evaluate(node)
@@ -132,33 +155,29 @@ class PUCT:
 
         return best_action, best_child.coords
     
-    def _get_best_action(self,node,path_memory):
-        """Select the best action based on the visit counts."""
-        best_puct_value = -np.inf
+    def _get_best_action(self, node):
         best_action = None
-        best_child = None
- 
+        best_puct_value = -np.inf
+
         for action, child in node.get_children().items():
-            puct_value = child.get_value(self.c_puct)
+            state_action_hash = (node.state_hash, action)
+            puct_value = self.Q[state_action_hash]
 
-        
-            # ############ Add a penalty for to visited nodes to encourage exploration #########
-            # penalty = 0.1 * child.visits
-            # puct_value -= penalty
+            # penalize multiple visitd actions actions
 
-            revisit_penalty = path_memory[self.encode_state(child.coords)] * 0.5
-            # puct_value -= revisit_penalty
+            penalty = 0.1 * self.N[state_action_hash]
+            puct_value -= penalty
+
 
             if puct_value > best_puct_value:
-                    best_puct_value = puct_value
-                    best_action = action
-                    best_child = child
+                best_puct_value = puct_value
+                best_action = action
 
         return best_action
 
-    def _select(self, node,path_memory):
+    def _select(self, node):
         """Select the child node with the highest PUCT value."""
-        best_action = self._get_best_action(node,path_memory)
+        best_action = self._get_best_action(node)
         self.env.step(best_action)
         return node.get_children()[best_action]
     
@@ -194,44 +213,42 @@ class PUCT:
         action_probs = preds.flatten()
 
         ############## Add dirichlet noise to the prior probabilities to encourage exploration if the node is the root node #########
-
         if node == self.root:
             action_probs = (1-self.epsilon) * action_probs + self.epsilon * np.random.dirichlet([self.alpha] * len(action_probs))
-        
+        ##############################################################################################################################
+
         action_prob_dict = {i: action_probs[i] for i in range(len(action_probs))}
         reward_map = self.env.get_rewards()
+
         next_states_rewads = {a: reward_map[valid_next_state] for a, valid_next_state in self.env.get_valid_next_states(node.coords).items()}
-        node.expand(action_prob_dict, self.env.get_valid_next_states(node.coords),next_state_value,next_states_rewads)
+
+        node.expand(action_prob_dict, self.env.get_valid_next_states(node.coords),next_state_value,next_states_rewads,self.env)
 
         return next_state_value
 
-    # def _backpropagate(self, node):
-    #     """Backpropagate the accumulated ground truth rewards up to the root."""
+    def _backpropagate(self, node):
+            """Backtrack to update the values and visits of each node up to the root."""
+            R = node.val_init
+            while node.parent:
+                # Calculate the cumulative reward for the current state-action pair
+                R = node.reward + self.gamma * R
 
-    #     # Initialize with the node's current ground truth reward
-    #     r = node.val_init
+                # Get the state-action hash for the current node and its parent action
+                state_action_hash = (node.parent.state_hash, node.action)
 
-    #     while node is not None:
-    #         # Update the node with the current reward
-    #         node.update(r)
+                # Update visit count (N), cumulative value (W), and Q value
+                self.N[state_action_hash] += 1
+                self.W[state_action_hash] += R
+                self.Q[state_action_hash] = self.W[state_action_hash] / self.N[state_action_hash]
 
-    #         # Move to the parent node and apply the discount factor
-    #         node = node.parent
-    #         if node is not None:
-    #             r = node.reward + self.gamma * r  # Accumulate the reward with discounting
+                # Move to the parent node
+                node.update(R)
+                node = node.parent
 
-    def _backpropagate(self,node):
-        """Backtrack to update the number of times a node has beenm visited and the value of a node untill we reach the root node. 
-        """
+            # Update the root node visit count as well
+            self.N[(self.root.state_hash, None)] += 1
 
-        R  = node.val_init
-        while node.parent:
-            R = node.reward + self.gamma * R
-            node = node.parent
-            node.update(R)
         
-            
-
     def _get_next_state_value(self, node, value, valid_actions):
         """Given value map grab next state value for current agent position
 
@@ -261,11 +278,7 @@ class PUCT:
             new_root.parent = None  # Remove the parent reference to make it the root
             self.root = new_root
 
-    def encode_state(self, coords):
-        """Encode the state as a hashable key."""
-        hasher = hashlib.md5()
-        hasher.update(str(coords).encode('utf-8'))
-        return hasher.hexdigest()
+
 
 
 
