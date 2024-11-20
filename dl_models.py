@@ -6,6 +6,19 @@ import numpy as np
 import random
 import torch.nn.functional as F
 
+class ValueModel(nn.Module):
+    def __init__(self):
+        super(ValueModel, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channels=2, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+
+
+    def forward(self, x):
+        pass
+
+
+
 
 class ValueIterationModel(torch.nn.Module):
     """Encoder-Decoder model for Value Iteration

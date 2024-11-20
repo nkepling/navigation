@@ -19,7 +19,7 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
-
+from dl_models import UNet
 
 # ensure_initialized()
 # NOTE: You have to from utils import * in order to run this code. In the utils file I set the map + value iteration configs. 
@@ -132,8 +132,15 @@ class SavedData(Dataset):
 
     def __getitem__(self, idx):
         id = self.indeces[idx]
-        input, target = torch.load(os.path.join(self.data_dir, f"map_{id}.pt"),weights_only=True)
-        return input, target
+        data = torch.load(os.path.join(self.data_dir, f"sample_{id}.pt"),weights_only=True)
+
+        reward = data["reward"]
+        value_map = data["value_map"]
+        obstacles = data["obstacles"]
+
+        X = torch.cat((reward, obstacles), dim=0)
+
+        return X, value_map
 
 
 class ValueIterationDataset(Dataset):
@@ -189,6 +196,10 @@ class AutoEncoderDataset(Dataset):
         
         assert input.shape == V.shape,(f"Got input shape {input.shape} and v shape {V.shape}")
         return input.float(), coords.float(), action, V.float()
+    
+
+
+
 
 class EarlyStopping:
     def __init__(self, patience=10, delta=0.001, warmup_epochs=10, path='best_model.pth'):
@@ -647,101 +658,62 @@ def dagger(expert_policy,expert_data_set,model,num_iters):
 
 
 
+
+def main(config):
+
+    train_directory = config.train_data_dir
+    train_file_count = sum(1 for f in os.listdir(train_directory) if os.path.isfile(os.path.join(train_directory, f)))
+
+    train_dataloader = SavedData(config.train_data_dir,indeces=[i for i in range(train_file_count)])
+    
+    val_directory = config.val_data_dir
+    val_file_count = sum(1 for f in os.listdir(val_directory) if os.path.isfile(os.path.join(val_directory, f)))
+
+    val_dataloader = SavedData(config.val_data_dir,indeces=[i for i in range(val_file_count)])
+
+    model = UNet()
+    criterion = torch.nn.MSELoss()
+    num_epochs = config.num_epochs
+
+    delta = config.delta
+    model_path = config.model_path
+
+    train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,criterion,delta)
+
       
 
 if __name__ == "__main__":
-    pass
-    # from dl_models import UNetSmall,CAE_Loss,ContractiveAutoEncoder
-    # from utils import *
-    # import pickle
-    # from dl_models import *
+    import argparse
+    
+    
+    
+    
+    parser = argparse.ArgumentParser()
 
+    # DATA
+    
+    parser.add_argument("--train_data_dir", type=str, default="training_data/value_cnn_train", help="Directory containing the training data.")
+    parser.add_argument("--val_data_dir", type=str, default="training_data/value_cnn_test", help="Directory containing the validation data.")
+    
 
+    # Training params
+
+    parser.add_argument("--num_epochs", type=int, default=300, help="Number of epochs for training.")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training.")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training.")
+    parser.add_argument("--delta", type=float, default=0.001, help="Delta for early stopping.")
+    parser.add_argument("--model_path", type=str, default="model_weights/value_cnn.pth", help="Path to save the trained model.")
+
+    
+    config = parser.parse_args()
+
+    main(config)
 
 
  
 
 
 
-    # dataset_size =len([os.path.join(data_dir, img) for img in os.listdir(data_dir) if img.endswith(('pt'))])
-
-    # train_size = int(0.7 * dataset_size)  # 70% for training
-    # val_size = int(0.15 * dataset_size)   # 15% for validation
-    # test_size = dataset_size - train_size - val_size  # 15% for testing
-   
-    # train_ind,test_ind,val_ind = torch.utils.data.random_split(range(dataset_size),[train_size,test_size,val_size])
-
-    # train_data = AutoEncoderDataset(data_dir,train_ind,num_workers=4,pin_memory=True)
-    # val_data = AutoEncoderDataset(data_dir,val_ind,num_workers=4,pin_memory=True)
-    # test_data = AutoEncoderDataset(data_dir,test_ind,num_workers=4,pin_memory=True)
-
-    # train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
-    # val_loader = DataLoader(val_data, batch_size=64, shuffle=True)
-    # test_loader = DataLoader(test_data,batch_size=1,shuffle=True)
-    
-    # # # model = UNetSmall()
-    # # model = UNetSmall()
-    # # model_path = "model_weights/unet_small_7.pth"
-
-    # # train_model(train_loader,val_loader, model, model_path,num_epochs=80)
-
-    # # # print(eval_model(test_loader,model=model, model_path=model_path))
-
-    # cae_model = ContractiveAutoEncoder()
-    # model_path = "model_weights/CAE_1.pth"
-    # # # criterion = CAE_Loss(beta=1e-4)
-
-    # #  # Adjust lr based on your needs
-
-    # # # pnet_model = PNet(2,latent_dim=128,hidden_dim=128)
-    # # # pnet_model_path = "model_weights/pnet_1.pth"
-    # pnet_model = PNetResNet(coord_dim=2,latent_dim=128,hidden_dim=128,num_blocks=8) # the other has 5 blocks
-    # pnet_model_path = "model_weights/pnet_resnet_2.pth"
-    # # optimizer = torch.optim.Adam(pnet_model.parameters(), lr=1e-4)
-
-    # # criterion = torch.nn.CrossEntropyLoss()
-    
-    # #train_pnet(train_loader,val_loader,pnet_model,cae_model,model_path,pnet_model_path,num_epochs=100,criterion=criterion,optimizer=optimizer)
-    
-
-    # # train_auto_encoder(train_dataloader=train_loader,
-    # #                    val_dataloader=val_loader,
-    # #                    model=model,
-    # #                    model_path=model_path,
-    # #                    num_epochs=100,
-    # #                    criterion=criterion,
-    # #                    optimizer=optimizer)
-    # # model.load_state_dict(torch.load(model_path,weights_only=True))
-    # # model.to(device)
-    # #print(autoencoder_val(model,test_loader,criterion=criterion,device=device))
-
-    # pnet_model.load_state_dict(torch.load(pnet_model_path,weights_only=True))
-
-    # cae_model.load_state_dict(torch.load(model_path,weights_only=True))
-    # cae_model.to(device)
-    # pnet_model.to(device)
-
-    # # # print(validate_pnet(test_loader,pnet_model=pnet_model,CAE_model=cae_model))
-
-    # print(test_acc_pnet(val_dataloader=test_loader,pnet_model=pnet_model,CAE_model=cae_model,device=device))
-
-    # # # Get one item from the test loader
-    # # test_iter = iter(test_loader)
-    # # input_image = next(test_iter)  # Assuming you only need the image, not the label
-
-    # # im = input_image[0]
-
-    # # # Move the input image to the correct device
-    # # im = im.to(device)
-
-    # # # Forward pass through the model
-
-    # # recon, latent = model(im)
-
-
-    # # compare_images(im,recon)
-        
-    
 
 
 
