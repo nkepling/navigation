@@ -138,9 +138,13 @@ class SavedData(Dataset):
         value_map = data["value_map"]
         obstacles = data["obstacles"]
 
-        X = torch.cat((reward, obstacles), dim=0)
 
-        return X, value_map
+
+        # X = torch.cat((reward, obstacles), dim=0)
+
+        # return X, value_map
+
+        return reward, obstacles, value_map
 
 
 class ValueIterationDataset(Dataset):
@@ -202,14 +206,14 @@ class AutoEncoderDataset(Dataset):
 
 
 class EarlyStopping:
-    def __init__(self, patience=10, delta=0.001, warmup_epochs=10, path='best_model.pth'):
+    def __init__(self, patience=10, delta=0.001, warmup_epochs=10, dir_path="model_weights/value_cnn"):
         self.patience = patience
         self.delta = delta
         self.warmup_epochs = warmup_epochs  # Wait this many epochs before applying early stopping
         self.counter = 0
         self.best_loss = None
         self.early_stop = False
-        self.path = path
+        self.path = dir_path
 
     def __call__(self, epoch, val_loss, model):
         if epoch < self.warmup_epochs:
@@ -218,7 +222,7 @@ class EarlyStopping:
 
         if self.best_loss is None:
             self.best_loss = val_loss
-            self.save_checkpoint(model)
+            self.save_checkpoint(model,epoch)
         elif val_loss > self.best_loss - self.delta:
             self.counter += 1
             if self.counter >= self.patience:
@@ -226,12 +230,12 @@ class EarlyStopping:
                 self.early_stop = True
         else:
             self.best_loss = val_loss
-            self.save_checkpoint(model)
+            self.save_checkpoint(model,epoch)
             self.counter = 0
 
-    def save_checkpoint(self, model):
+    def save_checkpoint(self, model,epoch):
         '''Save the model when validation loss improves.'''
-        torch.save(model.state_dict(),"model_weights/" + self.path+".pth")
+        torch.save(model.state_dict(), self.path+f"checkpoint_epoch_{epoch}.pth")
         print(f"Model saved at epoch with validation loss: {self.best_loss:.4f}")
 
 
@@ -243,16 +247,17 @@ def validate(model, validation_loader, criterion1, device):
     
     with torch.no_grad():  # Ensure no gradients are computed
         for data in validation_loader:
-            inputs, coords, action,V = data
-            inputs, labels = inputs.to(device), V.to(device)
+            X,_,V  = data
+            V = V.unsqueeze(1)
+            X, V = X.to(device), V.to(device)
 
             # Forward pass
-            outputs = model(inputs)
+            outputs = model(X)
             
             # Calculate loss
-            loss1 = criterion1(outputs, labels)
 
-            loss = loss1 
+            assert outputs.shape == V.shape, f"Got {outputs.shape} , {V.shape}"
+            loss = criterion1(outputs, V)
             v_loss.append(loss.item())
             
     
@@ -272,7 +277,7 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,c
     train_epoch_loss = []
     val_loss = []
     
-    early_stopper = EarlyStopping(patience=10,delta=delta,warmup_epochs=15,path=model_path)
+    early_stopper = EarlyStopping(patience=10,delta=delta,warmup_epochs=15,dir_path=model_path)
 
     with tqdm(total=num_epochs, desc="Training", unit="epoch") as pbar0:
         for epoch in range(num_epochs):
@@ -280,14 +285,27 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,c
  
             with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
                 for i, data in enumerate(train_dataloader):
-                    inputs, coords,action,V = data
-                    inputs, V = inputs.float().to(device), V.float().to(device)
+
+                    
+                    # inputs, coords,action,V = data
+                    # inputs, V = inputs.float().to(device), V.float().to(device)
+
+                    X, obstacles, value_map = data
+
+                    value_map = value_map.unsqueeze(1)
+
+                    X = X.to(device)
+                    value_map = value_map.to(device)
+
+
 
 
 
                     optimizer.zero_grad()
-                    outputs = model(inputs)
-                    loss = criterion(outputs, V)
+                    outputs = model(X)
+
+                    assert outputs.shape == value_map.shape, f"Got output shape of {outputs.shape} and V shape of {value_map.shape}"
+                    loss = criterion(outputs, value_map)
                     acc_loss += loss.item()
                     loss.backward()
                     optimizer.step()
@@ -302,8 +320,8 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,c
             pbar0.set_postfix(v_loss=v_loss)
             pbar0.update(1)
 
-            if epoch%10==0:
-                path = "model_weights/" + f"{model_path}_{epoch}.pth"
+            if epoch%50==0:
+                path = model_path + f"checkpoint_epoch_{epoch}.pt"
                 torch.save(model.state_dict(), path)
 
             early_stopper(epoch,v_loss,model)
@@ -311,19 +329,19 @@ def train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,c
                 print("Early stop at epoch: ",epoch)
                 break
 
-    torch.save(model.state_dict(), model_path)
+    torch.save(model.state_dict(), model_path + "final_model.pt")
 
     plt.plot([i for i in range(len(train_epoch_loss))], train_epoch_loss)
     plt.xlabel("Epoch") 
     plt.ylabel("Loss")
     plt.title("AE Training Loss")
-    plt.savefig("images/"+model_path+"train_loss.png")
+    plt.savefig("images/value_cnn/train_loss.png")
 
     plt.plot([i for i in range(len(val_loss))], val_loss)    
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Validation Loss")
-    plt.savefig("images/"+model_path+"val_loss.png")
+    plt.savefig("images/value_cnn/val_loss.png")
 
     print("DONE!!!")
 
@@ -663,20 +681,25 @@ def main(config):
 
     train_directory = config.train_data_dir
     train_file_count = sum(1 for f in os.listdir(train_directory) if os.path.isfile(os.path.join(train_directory, f)))
+    print("train_file_count", train_file_count)
+    # train_file_count = 2
 
-    train_dataloader = SavedData(config.train_data_dir,indeces=[i for i in range(train_file_count)])
+    train_dataloader = DataLoader(SavedData(config.train_data_dir,indeces=[i for i in range(train_file_count)]),batch_size=config.batch_size,shuffle=True)
     
     val_directory = config.val_data_dir
     val_file_count = sum(1 for f in os.listdir(val_directory) if os.path.isfile(os.path.join(val_directory, f)))
+    print("val_file_count", val_file_count)
+    # val_file_count = 2
 
-    val_dataloader = SavedData(config.val_data_dir,indeces=[i for i in range(val_file_count)])
+    val_dataloader = DataLoader(SavedData(config.val_data_dir,indeces=[i for i in range(val_file_count)]),batch_size=config.batch_size,shuffle=True)
 
     model = UNet()
+    model = model.to(device)
     criterion = torch.nn.MSELoss()
     num_epochs = config.num_epochs
 
     delta = config.delta
-    model_path = config.model_path
+    model_path = config.model_path_dir
 
     train_model(train_dataloader, val_dataloader, model, model_path,num_epochs,criterion,delta)
 
@@ -702,7 +725,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training.")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training.")
     parser.add_argument("--delta", type=float, default=0.001, help="Delta for early stopping.")
-    parser.add_argument("--model_path", type=str, default="model_weights/value_cnn.pth", help="Path to save the trained model.")
+    parser.add_argument("--model_path_dir", type=str, default="model_weights/value_cnn/", help="Path to save the trained model.")
 
     
     config = parser.parse_args()

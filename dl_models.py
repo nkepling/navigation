@@ -191,7 +191,7 @@ class UNet(torch.nn.Module):
 
         # Double Convolution Layers
 
-        self.layer_1 = DoubleConv(1,32)
+        self.layer_1 = DoubleConv(2,32)
         self.layer_2 = DoubleConv(32,64)
         self.layer_3 = DoubleConv(64,128)
         self.layer_4 = DoubleConv(128,256)
@@ -634,30 +634,6 @@ class LocalValPred(nn.Module):
 
 if __name__ == "__main__":
     pass
-    # model = PNet(coord_dim=2, latent_dim=128, hidden_dim=128, dropout_rate=0.5)
-    # model = PNetResNet(2,128,128,32)
-
-    # model = UNet()
-    # total_params = sum(p.numel() for p in model.parameters())
-    # print(f"Total number of parameters: {total_params}")
-
-   
-
-    # # # coords = torch.randn(32, 2)  # Batch size 32, 2D coordinates (x, y)
-    # # # latent = torch.randn(32, 128)  # Batch size 32, latent dimension from encoder
-
-    # # # # recon,latent = model(x)
-
-    # # # action_logits = model(coords,latent)
-
-
-
-    # x = torch.randn(size = (1,1,10,10))
-
-    # out = model(x)
-
-    # print(out.shape)
-
 
 
 

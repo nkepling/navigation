@@ -168,28 +168,28 @@ def vin_data(n_rewards, seeds, save_dir, num_reward_variants=7,):
 
 
 
-def main(n_train, n_test, save_path, train_seeds, test_seeds, num_reward_variants=7):
-    os.makedirs("vin_data", exist_ok=True)
-    print("Generating training data for VIN model")
+# def main(n_train, n_test, save_path, train_seeds, test_seeds, num_reward_variants=7):
+#     os.makedirs("vin_data", exist_ok=True)
+#     print("Generating training data for VIN model")
 
-    X, ValueMaps = vin_data_with_value_maps(
-        n_train, train_seeds, num_reward_variants
-    )
+#     X, ValueMaps = vin_data_with_value_maps(
+#         n_train, train_seeds, num_reward_variants
+#     )
 
-    print("Generating test data")
-    X_test, ValueMaps_test = vin_data_with_value_maps(
-        n_test, test_seeds, num_reward_variants
-    )
+#     print("Generating test data")
+#     X_test, ValueMaps_test = vin_data_with_value_maps(
+#         n_test, test_seeds, num_reward_variants
+#     )
 
-    # Save all data to a compressed file
-    np.savez_compressed(
-        save_path,
-        X=X,  ValueMaps=ValueMaps,
-        X_test=X_test, ValueMaps_test=ValueMaps_test
-    )
+#     # Save all data to a compressed file
+#     np.savez_compressed(
+#         save_path,
+#         X=X,  ValueMaps=ValueMaps,
+#         X_test=X_test, ValueMaps_test=ValueMaps_test
+#     )
 
-    print(f"Saved data to {save_path}")
-    return X, ValueMaps
+#     print(f"Saved data to {save_path}")
+#     return X, ValueMaps
 
 
 
