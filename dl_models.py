@@ -7,15 +7,43 @@ import random
 import torch.nn.functional as F
 
 class ValueModel(nn.Module):
-    def __init__(self):
+    def __init__(self, inchannels=3, grid_size=10):
+        """Value function model using a simple CNN architecture
+
+        Takes a 3 channel image as input (obstacles, rewards, agent position)
+        """
         super(ValueModel, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_channels=2, out_channels=32, kernel_size=3, padding=1)
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(in_channels=inchannels, out_channels=32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=128,out_channels=256,kernel_size=3,padding=1)
 
+        # Pooling layer
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Fully connected layers
+        # Compute the size of the flattened feature vector after convolutions and pooling
+        conv_output_size = (grid_size // 2 // 2) ** 2 * 256  # Adjust based on pooling
+        self.fc1 = nn.Linear(conv_output_size, 256)
+        self.fc2 = nn.Linear(256, 1)  # Scalar output for value function
 
     def forward(self, x):
-        pass
+        # Convolutional layers with ReLU and pooling
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+
+        # Flatten the feature map
+        x = x.view(x.size(0), -1)  # or torch.flatten(x, start_dim=1)
+
+        # Fully connected layers
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+
+        # Output the value in [-1, 1] using tanh activation
+        # simple ensure non-negative values
+        return F.relu(x)
 
 
 
@@ -46,7 +74,7 @@ class ValueIterationModelWithPooling(torch.nn.Module):
     def __init__(self):
         super(ValueIterationModelWithPooling, self).__init__()
         # Encoder (Downsampling)
-        self.conv1 = torch.nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1)
+        self.conv1 = torch.nn.Conv2d(in_channels=, out_channels=64, kernel_size=3, padding=1)
         self.bn1 = torch.nn.BatchNorm2d(64)
         self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Downsample to (64, 5, 5)
 
@@ -633,7 +661,19 @@ class LocalValPred(nn.Module):
 
 
 if __name__ == "__main__":
-    pass
+    from utils import init_random_reachable_map
+    from modified_gridenv import ModifiedGridEnvironment
+
+
+
+    model = UNet()
+
+    model_weights = torch.load("model_weights/final_model.pt",map_location=torch.device('mps'),weights_only=True)
+
+    model.load_state_dict(model_weights)
+
+
+    
 
 
 
