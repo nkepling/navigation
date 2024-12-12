@@ -175,3 +175,6 @@ training_data/
 
 
 *.packaging
+*.npz
+*.npy
+*.csv
