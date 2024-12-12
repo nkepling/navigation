@@ -3,6 +3,10 @@ from utils import *
 from types import SimpleNamespace   
 
 
+"""
+This file is to generate the map for the drone to navigate that more closely resembles the AirSim environment.
+"""
+
 def create_obstacles_map(n,min_obstacles,max_obstacles,min_obstacles_size,max_obstacles_size,num_no_fly_zones,no_fly_zone_size,seed=None):
     
 

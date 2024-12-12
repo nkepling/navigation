@@ -227,11 +227,9 @@ def init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type="bloc
 
 def init_random_reachable_map(n, 
                               config, 
-                              num_blocks, 
                               min_obstacles, 
                               max_obstacles, 
                               obstacle_type="block", 
-                              square_size=10, 
                               obstacle_map=None, 
                               seed=None,
                               num_reward_blocks=(3,6),
@@ -426,29 +424,29 @@ def load_env_config(config_file):
         config = yaml.load(f, Loader=yaml.FullLoader)
     return config
 
-def parse_and_initialize():
-    global n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
+# def parse_and_initialize():
+#     global n, config, num_blocks, num_obstacles, obstacle_type, square_size, random_map, gamma
     
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env_config", type=str, default="env_config.yaml", help="Path to the config file")
-    args = parser.parse_args()
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--env_config", type=str, default="env_config.yaml", help="Path to the config file")
+#     args = parser.parse_args()
     
-    env_config = load_env_config(args.env_config)
+#     env_config = load_env_config(args.env_config)
     
-    # Initialize the global constants
-    n = env_config["n"]
-    config = env_config["config"]
-    num_blocks = env_config["num_blocks"]
-    num_obstacles = env_config["num_obstacles"]
-    obstacle_type = env_config["obstacle_type"]
-    square_size = env_config["square_size"]
-    random_map = env_config["random_map"]
-    gamma = env_config["gamma"]
+#     # Initialize the global constants
+#     n = env_config["n"]
+#     config = env_config["config"]
+#     num_blocks = env_config["num_blocks"]
+#     num_obstacles = env_config["num_obstacles"]
+#     obstacle_type = env_config["obstacle_type"]
+#     square_size = env_config["square_size"]
+#     random_map = env_config["random_map"]
+#     gamma = env_config["gamma"]
 
 # Function to ensure constants are initialized when needed
-def ensure_initialized():
-    if n is None or config is None:
-        parse_and_initialize()
+# def ensure_initialized():
+#     if n is None or config is None:
+#         parse_and_initialize()
 
 def format_input_for_ddqn_cnn(state):
     if not isinstance(state,torch.Tensor):
@@ -461,7 +459,7 @@ def format_input_for_ddqn_cnn(state):
     return state
 
 if __name__ == "__main__":
-    ensure_initialized()
+    # ensure_initialized()
     print(f"n = {n}, config = {config}, num_blocks = {num_blocks}, gamma = {gamma}")
 
 

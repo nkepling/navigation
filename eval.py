@@ -13,19 +13,19 @@ from vi_with_nn_init import nn_initialized_vi
 from collections import defaultdict
 from dl_models import UNetSmall
 
-# Define the input map
-n = 10  # size of the grid
-config = "block"  # distribution of positive probability cells
-num_blocks = 3  # number of positive region blocks
-num_obstacles = 3  # number of obstacles
-obstacle_type = "block"
-square_size = 4  # size of the positive region square
+# # Define the input map
+# n = 10  # size of the grid
+# config = "block"  # distribution of positive probability cells
+# num_blocks = 3  # number of positive region blocks
+# num_obstacles = 3  # number of obstacles
+# obstacle_type = "block"
+# square_size = 4  # size of the positive region square
 
-# Discount factor
-gamma = 0.8
+# # Discount factor
+# gamma = 0.8
 
-# define experiment configuration
-random_map = True
+# # define experiment configuration
+# random_map = True
 
 def get_finite_vi_path(n, rewards, obstacles_map, neighbors, T, start, goal):
     agent_position = deepcopy(start)
@@ -78,18 +78,18 @@ def get_vi_path(n, rewards, obstacles_map, neighbors, start, goal):
     reward_list = []
     time_list = []
     checker = LiveLockChecker(last_visited={}, counter=0)
-    while agent_position!=goal:
+    while agent_position!=goal and steps < 500:
         rewards[agent_position[0], agent_position[1]] = 0
         start_time = time.time()
-        Viter = value_iteration(n, rewards, obstacles_map, gamma,neighbors)
+        Viter = value_iteration(n, rewards, obstacles_map, 0.9,neighbors)
         policy = extract_policy(Viter, obstacles_map,neighbors,n)
         end_time = time.time()
         print(f"Time for VI is {end_time - start_time}")
         time_list.append(end_time - start_time)
         next_position = tuple(int(i) for i in policy[agent_position])
         checker.update(agent_position, next_position)
-        if checker.check(agent_position, next_position):
-            break
+        # if checker.check(agent_position, next_position):
+        #     break
         agent_position = next_position
         path.append(agent_position)
         reward_list.append(rewards)

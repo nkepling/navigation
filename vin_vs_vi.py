@@ -3,12 +3,10 @@ import matplotlib.pyplot as plt
 from utils import *
 from heuristics import *
 from nn_training import *
-from fo_solver import *
+from fo_solver import value_iteration, extract_policy, precompute_next_states
 import pickle
 import torch
-from eval import *
-from dl_models import *
-from get_training_data import * 
+# from eval import *
 from pytorch_value_iteration_networks.model import *
 import time
 import pandas as pd
@@ -18,7 +16,8 @@ from queue import Queue
 
 from puct import PUCT
 from modified_gridenv import ModifiedGridEnvironment
-from tabluar_puct import tabPUCT
+from compare_paths import vin_replanner
+
 
 # Ensure the plot style is set
 sns.set(style="whitegrid")
@@ -82,6 +81,27 @@ def plot_results(results_df):
     plt.ylim(0, 1)  # Ensure the y-axis is between 0 and 1
     plt.show()
 
+def get_vin_replan_path(vin, n, obstacle_map, rewards, start, goal, k=50):
+    vin.eval()
+
+    start_time = time.time()
+    path = vin_replanner(vin,n, obstacle_map, rewards, start, goal, k)
+    end_time  = time.time() - start_time
+
+    mean_inference_time = end_time/len(path)
+
+    if goal in path:
+        success = True
+        reason = "Goal Reached"
+
+    else:
+        success = False
+        reason = "No Path Found"
+
+    return path, success, mean_inference_time, len(path), reason
+
+  
+
 
 def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
     actions = {0: (0, -1),
@@ -92,7 +112,7 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
     checker = LiveLockChecker(counter=0, last_visited={})
     agent_pos = deepcopy(start)
     path = [agent_pos]
-    max_step = 1000
+    max_step = 500
     step = 0
     inference_time = []
 
@@ -114,10 +134,10 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
 
         new_pos = tuple([agent_pos[0] + action[0], agent_pos[1] + action[1]])
 
-        checker.update(agent_pos, new_pos)
-        if checker.check(agent_pos, new_pos):
-            print("Live Lock Detected in VIN")
-            return path, False, np.mean(inference_time), len(path), "Live Lock Detected"
+        # checker.update(agent_pos, new_pos)
+        # if checker.check(agent_pos, new_pos):
+        #     print("Live Lock Detected in VIN")
+        #     return path, False, np.mean(inference_time), len(path), "Live Lock Detected"
         
         if obstacle_map[new_pos[0], new_pos[1]]:
             print("Agent moved into an obstacle")
@@ -130,6 +150,8 @@ def get_vin_path(vin, n, obstacle_map, rewards, start, goal):
     success = agent_pos == goal
 
     reason = "Goal Reached" if success else "Max Steps Reached"
+    if not success:
+        print("Max Steps Reached")
 
     return path, success, np.mean(inference_time), len(path), reason 
 
@@ -140,7 +162,7 @@ def get_vi_path(n, rewards, obstacle_map, neighbors, start, goal):
     agent_pos = deepcopy(start)
     checker = LiveLockChecker(counter=0, last_visited={})
     path = [agent_pos]
-    max_step = 1000
+    max_step = 500
     step = 0
     inference_time = []
 
@@ -155,10 +177,10 @@ def get_vi_path(n, rewards, obstacle_map, neighbors, start, goal):
         policy = extract_policy(V, obstacle_map, neighbors, n)
         next_pos = tuple(int(i) for i in policy[agent_pos])
 
-        checker.update(agent_pos, next_pos)
-        if checker.check(agent_pos, next_pos):
-            print("Live Lock Detected in VI")
-            return path, False, np.mean(inference_time), len(path), "Live Lock Detected"
+        # checker.update(agent_pos, next_pos)
+        # if checker.check(agent_pos, next_pos):
+        #     print("Live Lock Detected in VI")
+        #     return path, False, np.mean(inference_time), len(path), "Live Lock Detected"
         
 
         if obstacle_map[next_pos[0], next_pos[1]]:
@@ -254,7 +276,7 @@ def get_vin_path_with_value_hueristic(vin, n, obstacle_map,rewards, start,goal,k
 
 
 
-def get_puct_path(vin, config, obstacle_map, rewards, start, goal, k=50, max_steps=10000, gamma=1, c_puct=1.44):
+def get_puct_path(vin, config, obstacle_map, rewards, start, goal, k=50, max_steps=300, gamma=1, c_puct=1.44):
     actions = {0: (0, -1), 1: (1, 0), 2: (0, 1), 3: (-1, 0)}  # up, right, down, left
     checker = LiveLockChecker(counter=0, last_visited={})
     agent_pos = deepcopy(start)
@@ -263,27 +285,30 @@ def get_puct_path(vin, config, obstacle_map, rewards, start, goal, k=50, max_ste
     step = 0
     success = False
     reason = "Max Steps Reached"  # Default reason if no other termination condition met
-    env = ModifiedGridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal, living_reward=None, max_steps=1000)
-    puct = PUCT(vin, env, agent_pos, gamma=gamma, c_puct=c_puct,alpha=0.15,epsilon=0)
+    env = ModifiedGridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal, living_reward=None, max_steps=10000)
+    cnn = UNetSmall()
+    cnn.load_state_dict(torch.load("/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/smallfinal_model.pt", map_location=device,weights_only=True))
     # puct = tabPUCT(vin, env, agent_pos, gamma=gamma, c_puct=c_puct,k=50,alpha=0.15,epsilon=0)
     # puct = 
     while agent_pos != goal and step < max_steps:
         rewards[agent_pos[0], agent_pos[1]] = 0
+
+        puct = PUCT(vin, cnn, env, agent_pos, gamma=gamma, c_puct=c_puct,alpha=0.15,epsilon=0)
         # env = GridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal, max_steps=1000,living_reward=-0.01)   
         
         # Timing the inference
         start_time = time.time()
-        action, new_position = puct.search(agent_pos,rewards.copy(),num_simulations=150)
+        action, new_position = puct.search(agent_pos,rewards.copy(),num_simulations=100)
         inference_time = time.time() - start_time
         inference_times.append(inference_time)
-        puct.update_root(action)
+        # puct.update_root(action)
         
-        # Update for potential live-lock
-        checker.update(agent_pos, new_position)
-        if checker.check(agent_pos, new_position):
-            reason = "Live Lock Detected in PUCT"
-            print(reason)
-            break
+        # # Update for potential live-lock
+        # checker.update(agent_pos, new_position)
+        # if checker.check(agent_pos, new_position):
+        #     reason = "Live Lock Detected in PUCT"
+        #     print(reason)
+        #     break
 
         if obstacle_map[new_position[0], new_position[1]]:
             reason = "Agent moved into an obstacle, PUCT"
@@ -298,8 +323,13 @@ def get_puct_path(vin, config, obstacle_map, rewards, start, goal, k=50, max_ste
     success = agent_pos == goal
     if success:
         reason = "Goal Reached"
+    else:
+        reason = "Max Steps Reached"
 
     # Calculate mean and total inference time
+
+    if not success:
+        print("Max Steps Reached")
     mean_inference_time = np.mean(inference_times)
 
     return path, success, mean_inference_time, len(path), reason
@@ -347,18 +377,16 @@ if __name__ == "__main__":
     successful_paths = []
     failed_paths = []
     n = 20
-    seeds = np.random.randint(6100, 20000, 100)
+    seeds = np.random.randint(6100, 20000, 300)
     # seeds = [9651]
-
-    pnet = PNetResNet(2, 128, 128, 8)
-    pnet_path = "model_weights/pnet_resnet_2.pth"
-
-    cae_net = ContractiveAutoEncoder()
-    cae_net_path = "model_weights/CAE_1.pth"
+    min_obstacles = 2
+    max_obstacles = 10
+    n = 20
+    num_blocks = 5
+    square_size = 10    
 
     vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True, map_location=device)
  
-
     parser = argparse.ArgumentParser()
 
     ### Gridworld parameters
@@ -389,22 +417,38 @@ if __name__ == "__main__":
 
     config = parser.parse_args()
 
-
+    
 
     vin = VIN(config)
     vin.load_state_dict(vin_weights)
+
+    total_params = sum(p.numel() for p in vin.parameters())
+    print(f"Total number of parameters in VIN: {total_params}")
 
     vin.to(device)
     vin.eval()
 
     for seed in seeds:
         print(f"Running seed {seed}")
-        rewards, obstacles_map = init_random_reachable_map(n, "block", num_blocks, 2, 20, obstacle_type="block", square_size=square_size, obstacle_map=None, seed=seed)
+        #rewards, obstacles_map = init_random_reachable_map(n, "block", num_blocks, 2, 20, obstacle_type="block", square_size=square_size, obstacle_map=None, seed=seed)
+
+        rewards,obstacles_map = init_random_reachable_map(n, 
+                                    "block", 
+                                    2, 
+                                    20, 
+                                    obstacle_type="block", 
+                                    obstacle_map=None, 
+                                    seed=seed,
+                                    num_reward_blocks=(3,6),
+                                    reward_square_size=(2,8),
+                                    obstacle_cluster_prob=0.3,
+                                    obstacle_square_sizes=(1,5))
         if np.sum(rewards) == 0:
             continue
-        neighbors = precompute_next_states(n, obstacles_map)
-        start, goal = pick_start_and_goal(rewards, obstacles_map, seed=seed)
 
+        start, goal = pick_start_and_goal(rewards, obstacles_map, seed=seed)
+        #obstacles_map = np.zeros_like(obstacles_map)
+        neighbors = precompute_next_states(n, obstacles_map)
         if obstacles_map[start[0], start[1]]:
             print(f"Skipping seed {seed}: start position is on an obstacle")
             continue
@@ -414,7 +458,7 @@ if __name__ == "__main__":
             print(f"Skipping seed {seed}: goal is not reachable from start")
             continue
 
-
+        
         # Get VI path
         path_vi, success_vi, mean_inf_time_vi, total_steps_vi,reason = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
 
@@ -445,29 +489,41 @@ if __name__ == "__main__":
         })
         results_df = pd.concat([results_df, new_row_vin], ignore_index=True)
 
-        path_puct, success_puct, mean_inf_time_puct, total_steps_puct,reason = get_puct_path(vin,config,obstacles_map,rewards.copy(),start,goal,gamma=0.99,c_puct=1.4)
+        path_replan, success_replan, mean_inf_time_replan, total_steps_replan,reason = get_vin_replan_path(vin, 20, obstacles_map, rewards.copy(), start, goal, k=50)
 
-        new_row_puct = pd.DataFrame({
+        new_row_replan = pd.DataFrame({
             'seed': [seed],
-            'algorithm': ['PUCT'],
-            'mean_inference_time': [mean_inf_time_puct],
-            'total_steps': [total_steps_puct],
-            'successful': [success_puct],
-            'path_puct': [path_puct],
+            'algorithm': ['VIN_REPLAN'],
+            'mean_inference_time': [mean_inf_time_replan],
+            'total_steps': [total_steps_replan],
+            'successful': [success_replan],
+            'path_replan': [path_replan],
             'stop_reason': [reason]
         })
 
-        results_df = pd.concat([results_df, new_row_puct], ignore_index=True)
+        # path_puct, success_puct, mean_inf_time_puct, total_steps_puct,reason = get_puct_path(vin,config,obstacles_map,rewards.copy(),start,goal,gamma=0.9,c_puct=1.44)
+
+        # new_row_puct = pd.DataFrame({
+        #     'seed': [seed],
+        #     'algorithm': ['PUCT'],
+        #     'mean_inference_time': [mean_inf_time_puct],
+        #     'total_steps': [total_steps_puct],
+        #     'successful': [success_puct],
+        #     'path_puct': [path_puct],
+        #     'stop_reason': [reason]
+        # })
+
+        results_df = pd.concat([results_df, new_row_replan], ignore_index=True)
 
 
 
     # Save the results to a CSV file if needed
-    results_df.to_csv('path_results_3.csv', index=False)
+    results_df.to_csv('vin_replan.csv', index=False)
 
     # Print the DataFrame for quick view
 
-    # Plot results
-    plot_results(results_df)
+
+
 
     # successful_df = results_df[results_df['successful'] == True]
     # failed_df = results_df[results_df['successful'] == False]

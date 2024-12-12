@@ -12,6 +12,7 @@ from get_training_data import *
 from pytorch_value_iteration_networks.model import *
 import time
 from gridworld_env import GridEnvironment
+from modified_gridenv import ModifiedGridEnvironment
 from puct import *
 
 
@@ -25,7 +26,7 @@ def get_puct_path(vin,config,obstacle_map, rewards, start, goal, k=50, max_steps
 
     while agent_pos != goal and step < max_steps:
         rewards[agent_pos[0], agent_pos[1]] = 0
-        env = GridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal,max_steps=1000)
+        env = GridEnvironment(config, rewards.copy(), obstacle_map, agent_pos, goal,max_steps=1000) # this is wrong.. .
         puct = PUCT(vin,env, agent_pos,gamma=gamma,c_puct=c_puct)
         # Timing the inference
         start_time = time.time()
@@ -52,12 +53,6 @@ def get_puct_path(vin,config,obstacle_map, rewards, start, goal, k=50, max_steps
 
     path = [(p, "PUCT") for p in path]
     return path, mean_inference_time, total_inference_time
-
-
-
-
-
-
 
 def get_vi_path_with_fov(n, rewards, obstacles_map, neighbors, start, goal):
     agent_position = deepcopy(start)
@@ -128,8 +123,6 @@ def density_aware_vi(n, rewards, obstacles_map, neighbors, start, goal):
 
     return [(p,"Density_Aware_VI") for p in path]
 
-
-
 def get_vin_path(vin, n, obstacle_map,rewards, start,goal,k = 50):
 
 
@@ -187,8 +180,16 @@ def get_vin_path(vin, n, obstacle_map,rewards, start,goal,k = 50):
     print("total time to reach goal", np.sum(infrence_time))
     return path
 
-
 def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
+
+
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
+
+    else:
+        device = torch.device('cpu')
+
 
 
     actions = {0:(0,-1),
@@ -196,10 +197,10 @@ def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
                2:(0,1),
                3:(-1,0)} # up, right, down , left
 
-    checker = LiveLockChecker(counter=0,last_visited={})
+    #checker = LiveLockChecker(counter=0,last_visited={})
     agent_pos = deepcopy(start)
     path = [(agent_pos,"VIN")]
-    max_step = 100
+    max_step = 500
     step = 0
 
     infrence_time = []
@@ -212,7 +213,11 @@ def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
 
         start = time.time()
 
-        logits,_,_ = vin(input.to(device),torch.tensor(agent_pos[0]).to(device),torch.tensor(agent_pos[1]).to(device),k)
+        logits, _, _ = vin(
+                        input.to(device).type(torch.float32),  # Ensure input is float32 and on the device
+                        torch.tensor(agent_pos[0], dtype=torch.float32).to(device),  # Explicitly set dtype to float32
+                        torch.tensor(agent_pos[1], dtype=torch.float32).to(device),  # Explicitly set dtype to float32
+                        k)
 
         end = time.time() - start
 
@@ -224,11 +229,11 @@ def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
 
         new_pos = tuple([agent_pos[0] + action[0],agent_pos[1]+action[1]])
 
-        checker.update(agent_pos,new_pos)
-        if checker.check(agent_pos,new_pos):
-            print("Live Lock Detected")
-            print(np.mean(infrence_time))
-            break
+        # checker.update(agent_pos,new_pos)
+        # if checker.check(agent_pos,new_pos):
+        #     print("Live Lock Detected")
+        #     print(np.mean(infrence_time))
+        #     break
             # path = center_of_mass_heuristic(obstacles_map, rewards, agent_pos)
 
 
@@ -237,6 +242,7 @@ def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
 
         
         agent_pos = new_pos
+        step+=1
 
         path.append((agent_pos,"VIN"))  
 
@@ -245,9 +251,6 @@ def get_vin_path_with_value(vin, n, obstacle_map,rewards, start,goal,k = 16):
     print("total time to reach goal", np.sum(infrence_time))
 
     return path
-
-
-
 
 def get_p_net_path(cae_net,cae_net_path, pnet,pnet_path,obstacles_map,rewards,start,goal):
 
@@ -292,8 +295,6 @@ def get_p_net_path(cae_net,cae_net_path, pnet,pnet_path,obstacles_map,rewards,st
     
     return pathlist
 
-    
-
 def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
     agent_pos = deepcopy(start)
     checker = LiveLockChecker(counter=0, last_visited={})
@@ -328,7 +329,6 @@ def get_heuristic_path(n, rewards, obstacles_map, neighbors, start, goal):
             rewards[agent_pos] = 0  # Mark the current position as visited
 
     return pathlist
-
 
 def get_vin_path_with_value_hueristic(vin, n, obstacle_map,rewards, start,goal,k = 16):
 
@@ -398,7 +398,6 @@ def get_vin_path_with_value_hueristic(vin, n, obstacle_map,rewards, start,goal,k
     print("total time to reach goal", np.sum(infrence_time))
     return path
 
-
 def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,titles=None):
     num_paths = len(paths)
     fig, ax = plt.subplots(1, num_paths, figsize=(14, 10))  # Adjust figure size based on number of value functions
@@ -445,7 +444,6 @@ def compare_paths(paths, rewards, obstacles_map, target_location,seed=None,title
     # plt.savefig("images/vin_vs_vi/" + f"{seed}"+"vin_comparison_success.png", format='png')  # Save the figure as a PNG file
     plt.show()
 
-
 def compute_total_reward_per_step(path, rewards):
     """
     Compute the total reward collected along a path.
@@ -472,7 +470,6 @@ def compute_total_reward_per_step(path, rewards):
         rewards[pos[0], pos[1]] = 0  # Set the reward to 0 after collection
     
     return total_reward, rewards_per_step
-
 
 def compute_reward_per_step(path, rewards):
     """
@@ -516,7 +513,6 @@ def compute_reward_efficiency(path, rewards):
 
     return reward_efficiency, total_reward, num_steps
 
-
 def plot_rewards_per_step(rewards_per_step_list, titles):
     """
     Plot the rewards collected at each step for multiple paths.
@@ -537,7 +533,6 @@ def plot_rewards_per_step(rewards_per_step_list, titles):
 
     plt.tight_layout()
     plt.show()
-
 
 def compute_normalized_reward_efficiency(path, rewards):
     """
@@ -579,8 +574,6 @@ def compute_reward_per_encounter(path, rewards):
     return reward_per_encounter, total_reward, num_encounters
 
 
-
-
 def plot_reward_metrics(total_rewards_per_path,reward_efficiency_table, normalized_efficiency_table, reward_per_encounter_table):
     """
     Plot box-and-whiskers plots for reward metrics.
@@ -610,15 +603,109 @@ def plot_reward_metrics(total_rewards_per_path,reward_efficiency_table, normaliz
         ax.grid(True, linestyle='--', alpha=0.7)
 
         plt.tight_layout()
-        # plt.show()
+        plt.show()
 
-        plt.savefig("images/puct/" + f"{metric}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
-
-
+        #plt.savefig("images/puct/" + f"{metric}"+"vin_comparison.png", format='png')  # Save the figure as a PNG file
 
 
+def get_reward_metrics(seeds, vin, config, device):
+
+        T = 30
+          # seeds = [9651]
+        min_obstacles = 2
+        max_obstacles = 10
+        n = 20
+        num_blocks = 5
+        square_size = 10    
+
+        reward_efficiency_table = defaultdict(list)
+        nomalized_efficiency_table = defaultdict(list)
+        reward_per_encounter_table = defaultdict(list)
+        total_rewards_per_path = defaultdict(list)
+
+        mean_times = []
+        step_lists = []
+
+        for seed in [14621, 12771, 15214, 13201,  8901, 13922, 10723,  8528]:
+            rewards, obstacles_map = init_random_reachable_map(n, "block", num_blocks, 2, 20, obstacle_type="block", square_size=square_size, obstacle_map=None, seed=seed)
+            if np.sum(rewards) == 0:
+                continue
+
+            # obstacles_map = np.zeros_like(obstacles_map)
+            neighbors = precompute_next_states(n, obstacles_map)
+            start, goal = pick_start_and_goal(rewards, obstacles_map, seed=seed)
+
+            if not astar_search(obstacles_map, start, goal):
+                continue
+
+            reachable = mark_reachable_cells(start,obstacles_map)
+            rewards[~reachable] = 0
+
+            vi_path, mean_inf_time, steps = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
+            vin_path = get_vin_path_with_value(vin, n, obstacles_map, rewards.copy(), start, goal, k=50)
+            vin_replan = vin_replanner(vin, n, obstacles_map, rewards.copy(), start, goal, k=50)
+            vin_replan = [(p, "VIN Replan") for p in vin_replan]
 
 
+
+            # vin_heuristic_path = get_vin_path_with_value_hueristic(vin,20,obstacles_map,rewards.copy(),start,goal,k=50)
+            # puct_vin_path,mean_inf_time,total_inf_time = get_puct_path(vin,config,obstacles_map,rewards.copy(),start,goal,k=50)
+
+            paths = [vi_path, vin_path, vin_replan]
+            titles = ["Infinite Horizon VI", "VIN", "VIN Replan"]
+            # titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET","VIN"]
+            # titles = ["Infinite Horizon VI" ,"VIN + Heuristic (hueristic is in white)"]
+
+            compare_paths(paths, rewards, obstacles_map, goal, seed=seed, titles=titles)
+            #plot_rewards_per_step(paths, titles)
+
+            reward_efficiency, total_reward, num_steps = compute_reward_efficiency(vi_path, rewards.copy())
+            reward_efficiency_table["VI"].append(reward_efficiency)
+
+            reward_efficiency, total_reward, num_steps = compute_reward_efficiency(vin_path, rewards.copy())
+            reward_efficiency_table["VIN"].append(reward_efficiency)
+
+            reward_efficiency, total_reward, num_steps = compute_reward_efficiency(vin_replan, rewards.copy())
+            reward_efficiency_table["VIN Replan"].append(reward_efficiency)
+
+
+            # reward_efficiency, total_reward, num_steps = compute_reward_efficiency(puct_vin_path, rewards.copy())
+            # reward_efficiency_table["PUCT"].append(reward_efficiency)
+
+            normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(vi_path, rewards.copy())
+            nomalized_efficiency_table["VI"].append(normalized_efficiency)
+
+            normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(vin_path, rewards.copy())
+            nomalized_efficiency_table["VIN"].append(normalized_efficiency)
+
+            normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(vin_replan, rewards.copy())
+            nomalized_efficiency_table["VIN Replan"].append(normalized_efficiency)
+
+
+            # normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(puct_vin_path, rewards.copy())
+            # nomalized_efficiency_table["PUCT"].append(normalized_efficiency)
+
+            reward_per_encounter, total_reward, num_encounters = compute_reward_per_encounter(vi_path, rewards.copy())
+            reward_per_encounter_table["VI"].append(reward_per_encounter)
+            total_rewards_per_path["VI"].append(total_reward)
+
+            reward_per_encounter, total_reward, num_encounters = compute_reward_per_encounter(vin_path, rewards.copy())
+            reward_per_encounter_table["VIN"].append(reward_per_encounter)
+            total_rewards_per_path["VIN"].append(total_reward)
+
+            reward_per_encounter, total_reward, num_encounters = compute_reward_per_encounter(vin_replan, rewards.copy())
+            reward_per_encounter_table["VIN Replan"].append(reward_per_encounter)
+            total_rewards_per_path["VIN Replan"].append(total_reward)
+
+            # reward_efficiency, total_reward, num_steps = compute_reward_per_encounter(puct_vin_path, rewards.copy())
+            # reward_per_encounter_table["PUCT"].append(reward_efficiency)
+            # total_rewards_per_path["PUCT"].append(total_reward)
+
+
+
+        plot_reward_metrics(total_rewards_per_path, reward_efficiency_table, nomalized_efficiency_table, reward_per_encounter_table)
+        print(np.mean(mean_times))
+        print(np.mean(step_lists))        
 
 def visualize_values_and_rewards(value_map, reward_map, obstacles, start, goal, curr_pos=None):
     """
@@ -678,6 +765,136 @@ def visualize_values_and_rewards(value_map, reward_map, obstacles, start, goal, 
     plt.show()
 
 
+def test_value_cnn(config):
+
+    n = config.n
+    rewards, obstacles_map = init_random_reachable_map(n, config.obstacle_shape, config.num_obstacles, config.min_obstacles, config.max_obstacles, config.obstacle_type, config.square_size, config.obstacle_map, config.seed, config.num_reward_blocks, config.reward_square_size, config.obstacle_cluster_prob, config.obstacle_square_sizes)
+    neighbors = precompute_next_states(n, obstacles_map)
+    start, goal = pick_start_and_goal(rewards, obstacles_map, seed=config.seed)
+
+    if not astar_search(obstacles_map, start, goal):
+        print("No path found")
+        return
+
+    env = ModifiedGridEnvironment(config, rewards, obstacles_map, start, goal)
+
+    model = UNetSmall()
+
+    model.load_state_dict(torch.load("/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/smallfinal_model.pt", weights_only=True, map_location=torch.device('mps')))
+
+    env.reset()
+
+    input, state_x, state_y = env.get_vin_input()
+
+    V = model(input)
+
+    visualize_values_and_rewards(V, rewards, obstacles_map, start, goal)
+
+
+def vin_replanner(vin, n, obstacle_map,rewards, start,goal,k = 50):
+
+    empty_map = np.zeros_like(obstacle_map)
+
+    vin_path = get_vin_path_with_value(vin, n, empty_map, rewards, start, goal, k)
+    vin_path = [pos for pos, _ in vin_path]
+
+    current = start
+    i = 0
+    path = []
+    # Get positions of VIN path that correspond to obstacles
+    while i < len(vin_path):
+        next_pos = vin_path[i]
+
+        if obstacle_map[next_pos] == 1:
+            # Find the next non-obstacle position in the VIN path
+            j = i + 1
+            while j < len(vin_path) and obstacle_map[vin_path[j]] == 1:
+                j += 1
+
+            if j == len(vin_path):
+                # No valid position found; end the path
+                break
+
+            next_non_obstacle = vin_path[j]
+            # Use A* to navigate to the next non-obstacle position
+            a_star_path = astar_search(obstacle_map,current, next_non_obstacle)
+            if not a_star_path:
+                # If A* fails, break
+                break
+
+            # Add A* path to the final path (exclude the last position to avoid duplication)
+            path.extend(a_star_path[:-1])
+            current = next_non_obstacle
+            i = j  # Skip to the next non-obstacle position in the VIN path
+        else:
+            # No obstacle; add the position directly
+            path.append(next_pos)
+            current = next_pos
+            i += 1
+
+    return path
+
+
+
+
+def mark_reachable_cells(start, obstacles_map):
+    n = obstacles_map.shape[0]
+    reachable = np.zeros_like(obstacles_map, dtype=bool)
+    queue = deque([start])
+    reachable[start] = True
+
+    directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]  # Left, Down, Right, Up
+
+    while queue:
+        x, y = queue.popleft()
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < n and 0 <= ny < n and not obstacles_map[nx, ny] and not reachable[nx, ny]:
+                reachable[nx, ny] = True
+                queue.append((nx, ny))
+
+    return reachable
+
+
+def visualize_replanner(vin,seed):
+    n = 20
+    min_obstacles = 2
+    max_obstacles = 10
+    n = 20
+    num_blocks = 5
+    square_size = 10  
+    rewards, obstacles_map = init_random_reachable_map(n, "block", num_blocks, 2, 20, obstacle_type="block", square_size=square_size, obstacle_map=None, seed=seed)
+    start, goal = pick_start_and_goal(rewards, obstacles_map, seed=seed)
+
+    # reachable = mark_reachable_cells(start, obstacles_map)
+    # rewards[~reachable] = 0  # Set rewards to zero for unreachable cells
+
+    vin_path = vin_replanner(vin, n, obstacles_map, rewards.copy(), start, goal, k=50)
+
+
+
+    for p in vin_path:
+        rewards[p] = 0
+        visualize_rewards(rewards,obstacles_map,p,goal)
+        if p == goal:
+            break
+
+
+
+
+    
+
+
+    
+
+  
+        
+
+            
+
+
+
+
 
 
 
@@ -688,16 +905,17 @@ if __name__ == "__main__":
     import argparse
 
 
-    seeds = np.random.randint(6100,20000,100)
+    # seeds = np.random.randint(6100,20000,10)
+    seeds = [16515]
     # seeds = [1234]
 
     vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True,map_location=device)
-    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/vin_full_traj.pth')
+    #vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/model_weights/vin_full_traj.pth')
     parser = argparse.ArgumentParser()
 
     ### Gridworld parameters
 
-    parser.add_argument('--n', type=int, default=10, help='Grid size')
+    parser.add_argument('--n', type=int, default=20, help='Grid size')
     parser.add_argument('--obstacle_shape', type=str, default="block", help='Shape of obstacles')
     parser.add_argument('--num_obstacles', type=int, default=5, help='Number of obstacles')
     parser.add_argument('--min_obstacles', type=int, default=2, help='Minimum obstacles')
@@ -705,7 +923,7 @@ if __name__ == "__main__":
     parser.add_argument('--obstacle_type', type=str, default="block", help='Type of obstacles')
     parser.add_argument('--square_size', type=int, default=25, help='Size of the grid square')
     parser.add_argument('--obstacle_map', default=None, help='Initial obstacle map')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--seed', type=int, default=5324234, help='Random seed')
     parser.add_argument('--num_reward_blocks', type=tuple, default=(2, 5), help='Range of reward blocks')
     parser.add_argument('--reward_square_size', type=tuple, default=(4, 6), help='Size of reward squares')
     parser.add_argument('--obstacle_cluster_prob', type=float, default=0.3, help='Probability of obstacle clustering')
@@ -724,105 +942,23 @@ if __name__ == "__main__":
     config = parser.parse_args()
 
     vin = VIN(config)
+
     vin.load_state_dict(vin_weights)
-    vin.to(device)
     vin.eval()
+    vin.to(device)
 
-    T = 30
-
-    min_obstacles = 2
-    max_obstacles = 10
-    n = 20
-
-    reward_efficiency_table = defaultdict(list)
-    nomalized_efficiency_table = defaultdict(list)  
-    reward_per_encounter_table = defaultdict(list)  
-    total_rewards_per_path = defaultdict(list)
-
-    mean_times = []
-    step_lists = []
+    # get_reward_metrics(seeds, vin, config, device)
 
     for seed in seeds:
-        rewards, obstacles_map = init_random_reachable_map(n, 
-                                                           "block", 
-                                                           5, 
-                                                           min_obstacles, 
-                                                           max_obstacles, 
-                                                           obstacle_type="block", 
-                                                           square_size=25, 
-                                                           obstacle_map=None, 
-                                                           seed=seed, 
-                                                           num_reward_blocks=(2,5), 
-                                                           reward_square_size=(4,6), 
-                                                           obstacle_cluster_prob=0.3, 
-                                                           obstacle_square_sizes=(1,8))
-        if np.sum(rewards) == 0:
-            continue
-        neighbors = precompute_next_states(n, obstacles_map)
-        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
-
-        if not astar_search(obstacles_map,start,goal):
-            continue
-
-
-        # visualize_rewards(rewards,obstacles_map,start,goal)
-
-        vi_path,mean_inf_time,steps = get_vi_path(n, rewards.copy(), obstacles_map, neighbors, start, goal)
-
-        vin_path = get_vin_path_with_value(vin,n,obstacles_map,rewards.copy(),start,goal,k=20)
-        #vin_heuristic_path = get_vin_path_with_value_hueristic(vin,20,obstacles_map,rewards.copy(),start,goal,k=50)
-        # puct_vin_path,mean_inf_time,total_inf_time = get_puct_path(vin,config,obstacles_map,rewards.copy(),start,goal,k=50)
-
-        paths = [vi_path,vin_path]
-        titles = ["Infinite Horizon VI","VIN"]
-    #     # # titles = ["NN", "VI", "VI + NN", "Heuristic + NN","PNET","VIN"]
-    #     titles = ["Infinite Horizon VI" ,"VIN + Heuristic (hueristic is in white)"]
-
-        compare_paths(paths, rewards, obstacles_map, goal,seed=seed,titles=titles)
-
-        # plot_rewards_per_step(paths,titles)
-
-        # reward_efficiency, total_reward, num_steps = compute_reward_efficiency(vi_path,rewards.copy())
-        # reward_efficiency_table["VI"].append(reward_efficiency)
-        
-
-        # reward_efficiency, total_reward, num_steps = compute_reward_efficiency(vin_path,rewards.copy())
-        # reward_efficiency_table["VIN"].append(reward_efficiency)
-
-        # reward_efficiency, total_reward, num_steps = compute_reward_efficiency(puct_vin_path,rewards.copy())
-        # reward_efficiency_table["PUCT"].append(reward_efficiency)
-
-      
-        # normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(vi_path,rewards.copy())
-        # nomalized_efficiency_table["VI"].append(normalized_efficiency)
-
-        # normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(vin_path,rewards.copy())
-        # nomalized_efficiency_table["VIN"].append(normalized_efficiency)
-
-        # normalized_efficiency, total_reward, total_potential_reward = compute_normalized_reward_efficiency(puct_vin_path,rewards.copy())
-        # nomalized_efficiency_table["PUCT"].append(normalized_efficiency)
-
-        
-        # reward_per_encounter, total_reward, num_encounters = compute_reward_per_encounter(vi_path ,rewards.copy())
-        # reward_per_encounter_table["VI"].append(reward_per_encounter)
-
-        # total_rewards_per_path["VI"].append(total_reward)
-
-        # reward_per_encounter, total_reward, num_encounters = compute_reward_per_encounter(vin_path,rewards.copy())
-        # reward_per_encounter_table["VIN"].append(reward_per_encounter)
-
-        # total_rewards_per_path["VIN"].append(total_reward)
-
-        # reward_efficiency, total_reward, num_steps = compute_reward_per_encounter(puct_vin_path,rewards.copy())
-        # reward_per_encounter_table["PUCT"].append(reward_efficiency)   
-
-        # total_rewards_per_path["PUCT"].append(total_reward)
+        visualize_replanner(vin,seed)
 
 
 
-    # plot_reward_metrics(total_rewards_per_path,reward_efficiency_table, nomalized_efficiency_table, reward_per_encounter_table)
-# print(np.mean(mean_times))
-# print(np.mean(step_lists))
+
+
+
+
+
 
 
 
@@ -830,4 +966,3 @@ if __name__ == "__main__":
 
     
 
-    

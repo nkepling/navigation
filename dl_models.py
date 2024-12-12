@@ -74,7 +74,7 @@ class ValueIterationModelWithPooling(torch.nn.Module):
     def __init__(self):
         super(ValueIterationModelWithPooling, self).__init__()
         # Encoder (Downsampling)
-        self.conv1 = torch.nn.Conv2d(in_channels=, out_channels=64, kernel_size=3, padding=1)
+        self.conv1 = torch.nn.Conv2d(in_channels=2, out_channels=64, kernel_size=3, padding=1)
         self.bn1 = torch.nn.BatchNorm2d(64)
         self.pool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)  # Downsample to (64, 5, 5)
 

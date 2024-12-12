@@ -166,6 +166,23 @@ class ModifiedGridEnvironment:
 
     def get_rewards(self):
         return self.rewards
+    
+    def get_next_state(self, state, action):
+
+        dir = self.action_to_dir[action]
+
+        next_state = (state[0] + dir[0], state[1] + dir[1])
+
+        assert next_state in self.neighbors[state], f"Invalid action {action} from state {state}"
+
+        return next_state
+
+    
+    def get_reward(self, state):
+
+        return self.rewards[state]
+    
+    
 
 
 if __name__ == "__main__":
