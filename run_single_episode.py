@@ -58,7 +58,7 @@ def run_single_episode(model, heuristic=False,viz=False):
                 prev_pos = p
                 if p == goal:
                     break
-        return vin_pathb
+        return vin_path
     
     ######### Pure VIN #########
 
@@ -155,4 +155,4 @@ if __name__ == "__main__":
 
     ######## Set heuristic to True to run the heuristic, False to run the pure VIN ########
     ######## Set viz to True to visualize the path ########
-    main(config,heuristic=True,viz=True)
+    main(config,heuristic=False,viz=True)q

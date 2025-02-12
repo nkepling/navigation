@@ -62,7 +62,7 @@ class ModifiedGridEnvironment:
         else:
             # Reset to initial conditions if shuffling is not enabled
             if rewards is not None:
-                self.rewards = rewards
+                self.rewards = rewards.copy()
             else:
                 self.rewards = self.initial_rewards.copy()
 
@@ -74,35 +74,54 @@ class ModifiedGridEnvironment:
 
         # Reset visit count for all states
         self.visit_count = defaultdict(int)
-        return self.current_position, {}
+        state_hash = self.encode_state(self.current_position)
+        return state_hash, {}
 
     def step(self, action):
         i, j = self.current_position
         direction = self.action_to_dir[action]
         next_position = (i + direction[0], j + direction[1])
 
+        next_position = (np.clip(next_position[0], 0, self.n-1), np.clip(next_position[1], 0, self.n-1))
+
         # Check if the next position is an obstacle
         if not self.obstacles[next_position]:
             self.current_position = next_position
+            collision = False
             self.step_count += 1
         else:
-            raise ValueError("Invalid action: Next position is an obstacle")
+            # Stay in the same position if the next position is an obstacle
+            self.step_count += 1
+            collision = True
+        
+        # clip the position to the grid
+
+
 
         # Encode the state and calculate visit count penalty
         state_hash = self.encode_state(self.current_position)
       
         visit_penalty = -0.1 * self.visit_count[state_hash]  # Adjust this multiplier as needed
-        # Collect reward and apply visit penalty
-        if not self.visited[self.current_position]:
-            reward = self.rewards[self.current_position]
-            self.visited[self.current_position] = True
-            self.rewards[self.current_position] = 0  # Set reward to 0 after collecting
-        else:
-            reward = 0
-            # reward += visit_penalty
-            # self.rewards[self.current_position]+=visit_penalty
 
-        # Apply visit penalty based on the visit count
+
+
+        # Collect reward and apply visit penalty
+        ####### REWARD FUNCTION ########
+
+        reward = self.rewards[self.current_position]
+        self.rewards[self.current_position] = 0  # Set reward to 0 after collecting
+
+
+        # if not self.visited[self.current_position]:
+        #     reward = self.rewards[self.current_position]
+        #     self.visited[self.current_position] = True
+        #     self.rewards[self.current_position] = 0  # Set reward to 0 after collecting
+        # else:
+        #     reward = 0
+        #     # reward += visit_penalty
+        #     # self.rewards[self.current_position]+=visit_penalty
+
+        # # Apply visit penalty based on the visit count
 
         # reward += visit_penalty
         self.visit_count[state_hash] += 1
@@ -113,11 +132,11 @@ class ModifiedGridEnvironment:
 
         # Check if the episode is done
         if self.train:
-            done = self.step_count >= self.max_steps
+            done = self.step_count >= self.max_steps or (collision)
         else:  # testing
-            done = (self.current_position == self.target)
+            done = (self.current_position == self.target)  or (collision)
 
-        return self.current_position, reward, done, False, {}
+        return state_hash, reward, done, False, {}
 
     def get_valid_actions(self, state=None):
         if state is None:

@@ -460,8 +460,30 @@ def format_input_for_ddqn_cnn(state):
 
 if __name__ == "__main__":
     # ensure_initialized()
-    print(f"n = {n}, config = {config}, num_blocks = {num_blocks}, gamma = {gamma}")
+    # print(f"n = {n}, config = {config}, num_blocks = {num_blocks}, gamma = {gamma}")
+    from fo_solver import visualize_rewards,pick_start_and_goal
 
+    n = 50
+    min_obstacles = 10
+    max_obstacles = 20 
+
+    for i in range(10):
+
+        rewards, obstacles_map = init_random_reachable_map(n, 
+                                "block", 
+                                min_obstacles, 
+                                max_obstacles, 
+                                obstacle_type="block", 
+                                obstacle_map=None, 
+                                seed=None,
+                                num_reward_blocks=(3,8),
+                                reward_square_size=(3,15),
+                                obstacle_cluster_prob=0.3,
+                                obstacle_square_sizes=(3,10))
+        
+        start,goal = pick_start_and_goal(rewards,obstacles_map)
+
+        visualize_rewards(rewards,obstacles_map,start,goal)
 
     
     

@@ -13,13 +13,13 @@
 
 The VIN model take in a config object to set all of its hyper parameters. See run_single_episode.py for an example of how that is constructed. 
 
-The `k` parameter is the number of times the out put of the VIN ruurses through the network. 
+The `k` parameter is the number of times the out put of the VIN rucurses through the network. 
 
 **INPUTS:**
 
 A 2 x 20 x 20 image and the coordinates of the agent
 
-**OUTPUS***
+**OUTPUTS***
 
 A 1 x 4 vector coresponding to action logits.  Actions are mapped as `actions = {0: (0, -1), 1: (1, 0), 2: (0, 1), 3: (-1, 0)}  # up, right, down, left `
 
