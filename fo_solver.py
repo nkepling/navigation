@@ -5,19 +5,19 @@ import time
 import pickle
 from copy import deepcopy
 
-# Define the input map
-n = 50  # size of the grid
-config = "block"  # distribution of positive probability cells
-num_blocks = 3  # number of positive region blocks
-num_obstacles = 3  # number of obstacles
-obstacle_type = "block"
-square_size = 4  # size of the positive region square
+# # Define the input map
+# n = 50  # size of the grid
+# config = "block"  # distribution of positive probability cells
+# num_blocks = 3  # number of positive region blocks
+# num_obstacles = 3  # number of obstacles
+# obstacle_type = "block"
+# square_size = 4  # size of the positive region square
 
-# Discount factor
-gamma = 0.8
+# # Discount factor
+# gamma = 0.8
 
-# define experiment configuration
-random_map = True
+# # define experiment configuration
+# random_map = True
 
 def get_fov(cur_state, next_state, obstacles, map_shape, fov_range=10, fov_angle=60):
     """

@@ -1,0 +1,38 @@
+#Experiments parameters
+experiment_name: "baseline_mcts_5x5"
+num_seeds: 5
+num_workers: 1
+max_steps: 100
+seed_range: [10000, 20000]
+
+#Environment parameters
+n: 5
+rewards_config: "block"
+min_obstacles: 2
+max_obstacles: 3
+
+num_reward_blocks: [2,5]
+reward_square_size: [1,2]
+obstacle_type: "block"
+obstacle_map: null
+
+obstacle_cluster_prob: 0.0
+obstacle_square_sizes: [1,2]
+
+living_reward: 0
+collision_penalty: -0.1
+
+#MCTS parameters
+d: 100
+m: 500
+c: 1.4
+gamma: 0.999
+heuristic: False
+puct: False
+temperature: 1.0
+tree_depth: null
+vin: null
+
+
+#VIN parameters
+

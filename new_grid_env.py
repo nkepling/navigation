@@ -14,7 +14,7 @@ transitions: If the agent inta positive reward cell and does not find the goal, 
 """
 
 class GridworldEnv(gym.Env):
-    def __init__(self, rewards, obstacles,start_pos=(0,0),goal_pos=(1,1),living_reward=0.0):
+    def __init__(self, rewards, obstacles,start_pos=(0,0),goal_pos=(1,1),living_reward=0.0,collision_penalty=-0.1):
         """
         Initialize the Gridworld environment.
         
@@ -34,6 +34,7 @@ class GridworldEnv(gym.Env):
         self.agent_position = np.array(start_pos)
         self.start_pos = start_pos
         self.goal_pos = goal_pos
+        self.collision_penalty = collision_penalty
 
         self.living_reward = living_reward
 
@@ -85,7 +86,7 @@ class GridworldEnv(gym.Env):
 
         # Check for out-of-bounds movement
         if new_x < 0 or new_x >= self.height or new_y < 0 or new_y >= self.width:
-            reward = -0.1 # Penalty for hitting boundary
+            reward = self.collision_penalty # Penalty for hitting boundary
             reward += self.living_reward
             self.terminated = False
             state = self.get_state()
@@ -95,7 +96,7 @@ class GridworldEnv(gym.Env):
 
         # Check for obstacles
         elif self.obstacles[new_x, new_y] == 1:
-            reward = -0.1  # Penalty for hitting obstacle
+            reward = self.collision_penalty  # Penalty for hitting obstacle
             reward += self.living_reward
             self.terminated = False
             info["collision"] = True

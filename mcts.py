@@ -6,7 +6,7 @@ import ns_gym as nsg
 import ns_gym.base as base
 import random
 from collections import defaultdict
-from nn_training import reformat_input
+# from nn_training import reformat_input
 
 
 
@@ -596,7 +596,7 @@ if __name__ == "__main__":
     min_obstacles = 1 # minimum number of obstacles
     max_obstacles = 2 # maximum number of obstacles
 
-    max_steps = 500 # maximum number of steps to take
+    max_steps = 100 # maximum number of steps to take
     step = 0 
 
     seed = 14

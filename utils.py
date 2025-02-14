@@ -6,6 +6,7 @@ import random
 import yaml
 import scipy 
 import torch
+from collections import deque
 """
 Takes config: single double random
 and size n as inputs
@@ -135,7 +136,7 @@ def init_map(n, config, num_blocks, num_obstacles, obstacle_type="block", square
 
 
 
-def is_reachable(rewards, obstacles_map):
+def is_reachable(rewards, obstacles_map,get_visted=False):
     """
     Check if all non-obstacle cells are reachable from the first non-obstacle cell using BFS.
     """
@@ -167,6 +168,9 @@ def is_reachable(rewards, obstacles_map):
             if 0 <= nx < n and 0 <= ny < n and not obstacles_map[nx, ny] and not visited[nx, ny]:
                 visited[nx, ny] = True
                 queue.append((nx, ny))
+
+    if get_visted:
+        return(visited)
 
     # Check if all non-obstacle cells have been visited
     return np.all(visited | obstacles_map)
@@ -226,7 +230,7 @@ def init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type="bloc
 
 
 def init_random_reachable_map(n, 
-                              config, 
+                              rewards_config, 
                               min_obstacles, 
                               max_obstacles, 
                               obstacle_type="block", 
@@ -239,14 +243,17 @@ def init_random_reachable_map(n,
     if seed:
         np.random.seed(seed)
         random.seed(seed)
-        
+
+    attempts = 0
+
     while True:  # Loop until we generate a valid map
         rewards = np.zeros((n, n))
         obstacles_map = np.zeros((n, n), dtype=bool)
         num_blocks = np.random.randint(num_reward_blocks[0],num_reward_blocks[1])
         square_size = random.randint(reward_square_size[0],reward_square_size[1])
 
-        if config == "block":
+        # Create rewards distritbution
+        if rewards_config == "block":
             for _ in range(num_blocks):
                 start_x = random.randrange(0, n)
                 start_y = random.randrange(0, n)
@@ -254,6 +261,8 @@ def init_random_reachable_map(n,
                 end_y = min(start_y + square_size, n)
                 rewards[start_x:end_x, start_y:end_y] = np.random.randint(1, 100, (end_x - start_x, end_y - start_y))
 
+
+        # Set up obstacle map distributions... 
         if obstacle_map is not None:
             obstacles_map = obstacle_map
             rewards[obstacles_map] = 0
@@ -292,22 +301,30 @@ def init_random_reachable_map(n,
                             if 0 <= cx < n and 0 <= cy < n:
                                 obstacles_map[cx, cy] = True
                                 rewards[cx, cy] = 0
+            else:
+                raise ValueError("Invalide obstacle type")
+
+
+        if not is_reachable(rewards,obstacles_map):
+            not_visited = is_reachable(rewards,obstacles_map,get_visted=True)
+            rewards = np.where(not_visited,rewards,0)
 
         # Normalize rewards to sum to 1
+        rewards[0,0] = 0
         total_sum = np.sum(rewards)
         if total_sum != 0:
             rewards = rewards / total_sum
 
-        # # Check if all non-obstacle cells are reachable
-        # if is_reachable(rewards, obstacles_map):
-        #     break  # If the map is valid, exit the loop and return the result
-        # else:
-        #     print("Regenerating map: Non-obstacle cells are not fully reachable.")
-
-        # Check that the agent is not in an obstacle cell
-
         if obstacles_map[0, 0]:
+            attempts += 1 
             continue
+
+        elif np.sum(rewards) == 0:
+            attempts += 1
+            continue
+
+        elif attempts > 25:
+            raise ValueError("No valid map found.")
         else:
             break
 
@@ -323,7 +340,7 @@ def precompute_next_states(n, obstacles):
     """
     Precompute the set of adjacent states for each state: 
     """
-    next_states = {}
+    next_states = {} 
     for i in range(n):
         for j in range(n):
             if obstacles[i, j]:
@@ -463,11 +480,11 @@ if __name__ == "__main__":
     # print(f"n = {n}, config = {config}, num_blocks = {num_blocks}, gamma = {gamma}")
     from fo_solver import visualize_rewards,pick_start_and_goal
 
-    n = 50
-    min_obstacles = 10
-    max_obstacles = 20 
+    n = 5
+    min_obstacles = 1
+    max_obstacles = 3
 
-    for i in range(10):
+    for i in range(100):
 
         rewards, obstacles_map = init_random_reachable_map(n, 
                                 "block", 
@@ -476,10 +493,10 @@ if __name__ == "__main__":
                                 obstacle_type="block", 
                                 obstacle_map=None, 
                                 seed=None,
-                                num_reward_blocks=(3,8),
-                                reward_square_size=(3,15),
-                                obstacle_cluster_prob=0.3,
-                                obstacle_square_sizes=(3,10))
+                                num_reward_blocks=(2,3),
+                                reward_square_size=(1,3),
+                                obstacle_cluster_prob=0.0,
+                                obstacle_square_sizes=(1,2))
         
         start,goal = pick_start_and_goal(rewards,obstacles_map)
 

@@ -178,3 +178,4 @@ training_data/
 *.npz
 *.npy
 *.csv
+*.todo
