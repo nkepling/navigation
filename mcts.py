@@ -6,12 +6,19 @@ import ns_gym as nsg
 import ns_gym.base as base
 import random
 from collections import defaultdict
+
+
+
 # from nn_training import reformat_input
-
-
 
 """
 MCTS with Chance Nodes to handle stochastic environments. This implementation used a global table to store the Q values and visit counts for state-action pairs and states. Compatible with OpenAI Gym environments.
+"""
+
+
+
+
+"""Nodes for tree
 """
 
 class DecisionNode: 
@@ -331,6 +338,7 @@ class MCTS:
                 assert(type(v) == DecisionNode)
                 self.update_metrics_decision_node(v.state)
             # R = R*(self.gamma**depth)
+
             depth+=1
             v = v.parent
 
@@ -473,7 +481,7 @@ class MCTS:
     def _STL_selection(self,v:DecisionNode):
         """Select the next node to go down in the search tree based on the STL robustness value agumented with the UCT formula.
         """
-        raise not NotImplementedError
+        raise NotImplementedError
 
 
     
@@ -591,10 +599,11 @@ if __name__ == "__main__":
     # n = 10
     n = 6
     n= 5
+    n=20
 
     # n = 10
-    min_obstacles = 1 # minimum number of obstacles
-    max_obstacles = 2 # maximum number of obstacles
+    min_obstacles = 5 # minimum number of obstacles
+    max_obstacles = 10 # maximum number of obstacles
 
     max_steps = 100 # maximum number of steps to take
     step = 0 
@@ -618,10 +627,10 @@ if __name__ == "__main__":
                                     obstacle_type="block", 
                                     obstacle_map=None, 
                                     seed=seed,
-                                    num_reward_blocks=(2,5),
-                                    reward_square_size=(1,2),
-                                    obstacle_cluster_prob=0,
-                                    obstacle_square_sizes=(1,2))
+                                    num_reward_blocks=(3,5),
+                                    reward_square_size=(3,5),
+                                    obstacle_cluster_prob=0.2,
+                                    obstacle_square_sizes=(1,4))
         
         rewards[0,0] = 0
 
@@ -697,7 +706,7 @@ if __name__ == "__main__":
         # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
         start = time.time()
         while step < max_steps and not done:
-            # visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+            visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
 
             # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
             # assert mcts.root.state == observation, "Root state must match observation!"
