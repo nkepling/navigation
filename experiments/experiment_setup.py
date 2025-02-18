@@ -161,7 +161,12 @@ def run_experiment(config,new_agent_func):
             results.append(result)
             pbar.update(1)  
 
-    
+    filepath = os.path.abspath(__file__)
+
+    dir_name = os.path.dirname(filepath)
+    new_dir = os.path.join(dir_name,"results")
+    os.makedirs(new_dir, exist_ok=True)
+
     filename = "experiments/results/" + config["experiment_name"] + ".csv"
     path = pathlib.Path(filename)
     save_file(results,path)  # Save results to CSV

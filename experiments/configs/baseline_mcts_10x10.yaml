@@ -1,15 +1,15 @@
 #Experiments parameters
-experiment_name: "baseline_mcts_5x5"
+experiment_name: "baseline_mcts_10x10"
 num_seeds: 150 
 num_workers: 30 
 max_steps: 100
 seed_range: [10000, 20000]
 
 #Environment parameters
-n: 5
+n: 10 
 rewards_config: "block"
 min_obstacles: 2
-max_obstacles: 3
+max_obstacles: 5 
 
 num_reward_blocks: [2,5]
 reward_square_size: [1,2]

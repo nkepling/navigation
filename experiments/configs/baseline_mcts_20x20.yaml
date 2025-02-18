@@ -1,23 +1,23 @@
 #Experiments parameters
-experiment_name: "baseline_mcts_5x5"
+experiment_name: "baseline_mcts_20x20"
 num_seeds: 150 
 num_workers: 30 
-max_steps: 100
+max_steps: 300
 seed_range: [10000, 20000]
 
 #Environment parameters
-n: 5
+n: 20 
 rewards_config: "block"
-min_obstacles: 2
-max_obstacles: 3
+min_obstacles: 5 
+max_obstacles: 10 
 
-num_reward_blocks: [2,5]
-reward_square_size: [1,2]
+num_reward_blocks: [3,5]
+reward_square_size: [3,5]
 obstacle_type: "block"
 obstacle_map: null
 
-obstacle_cluster_prob: 0.0
-obstacle_square_sizes: [1,2]
+obstacle_cluster_prob: 0.2
+obstacle_square_sizes: [1,4]
 
 living_reward: 0
 collision_penalty: -0.1
