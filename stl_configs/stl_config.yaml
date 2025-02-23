@@ -1,0 +1,27 @@
+### STL Expression file
+# The format is:
+# Guidence:
+#     "name": "expression"
+# Pruning:
+#     "name": "expression"
+
+
+guidence:
+  variables:
+    - 'agent_position'
+    - 'obstacle_location'
+    - 'effective_vin'
+    - 'keep_seaching'
+    - 'area_of_interest'
+  
+  constants:
+  specs:
+
+pruning:
+  variables:
+  constants:
+  specs:
+  
+
+
+

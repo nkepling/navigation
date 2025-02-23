@@ -44,6 +44,8 @@ class DecisionNode:
 
         if isinstance(state, np.ndarray):
             state = tuple(state)
+
+        
         self.state = state
         self.weight = weight  # Probability to occur
         self.is_terminal = is_terminal
@@ -55,6 +57,8 @@ class DecisionNode:
         self.value = 0 # value of state
         self.reward = reward# immediate reward
         self.weighted_value = self.weight * self.value
+
+        self.coord = state[1]
 
 class ChanceNode:
     """
@@ -83,7 +87,7 @@ class MCTS:
         Selection and expansion are combined into the "treepolicy method"
         The rollout/simluation is the "default" policy. 
     """
-    def __init__(self,env:gym.Env,state,d,m,c,gamma,heuristic=False,vin=None,puct=False,temperature=1.0,tree_depth=None) -> None:
+    def __init__(self,env:gym.Env,state,d,m,c,gamma,heuristic=False,vin=None,puct=False,temperature=1.0,tree_depth=None,seed=None) -> None:
         """
         Args:
             env (gym.Env): The environment to run the MCTS on.
@@ -102,7 +106,7 @@ class MCTS:
 
         """
         self.env = env # This is the current state of the mdp
-        self.d = d # depth #TODO icorportae this into simulation depth
+        self.d = d # depth 
         self.m = m # number of simulations
         self.c = c # exploration constant
         self.tree_depth = tree_depth
@@ -114,6 +118,12 @@ class MCTS:
 
         if self.vin:
             vin.eval()
+
+        # set random seed
+
+        if seed is not None:
+            np.random.seed(seed=seed)
+            random.seed(seed=seed)
 
         self.v0 = DecisionNode(parent=None,state=state,weight=1,is_terminal=False,reward=0)
 
@@ -174,7 +184,7 @@ class MCTS:
         Returns:
             ChanceNode: The leaf node reached by the tree policy.
         """
-        while node.children: #BUG: Returns a list sometimes
+        while node.children: 
             if type(node) == DecisionNode:
                 node = self._selection(node)
                 assert(type(node) == ChanceNode)
@@ -482,8 +492,6 @@ class MCTS:
         """Select the next node to go down in the search tree based on the STL robustness value agumented with the UCT formula.
         """
         raise NotImplementedError
-
-
     
     def best_action(self,v):
         """Select the best action based on the Q values of the state-action pairs.
@@ -496,7 +504,7 @@ class MCTS:
         s = v.state # root is Type[Node] 
 
         # Iterate through all possible actions from this state
-        for a in range(self.env.action_space.n): # FIXME
+        for a in range(self.env.action_space.n):
             sa = (s, a)  # Create a state-action pair
             # Check if this state-action pair has been explored
             if sa in self.Qsa and sa in self.Nsa and self.Nsa[sa] > 0:
@@ -599,18 +607,17 @@ if __name__ == "__main__":
     # n = 10
     n = 6
     n= 5
-    n=20
 
     # n = 10
-    min_obstacles = 5 # minimum number of obstacles
-    max_obstacles = 10 # maximum number of obstacles
+    min_obstacles = 2 # minimum number of obstacles
+    max_obstacles = 3 # maximum number of obstacles
 
     max_steps = 100 # maximum number of steps to take
     step = 0 
 
-    seed = 14
-    seed = 42
-    seed = 69
+    seed = 27
+    # seed = 42
+    
     # q
     # seed = 199
 
@@ -618,136 +625,110 @@ if __name__ == "__main__":
     table = {"seed":[],"reward":[],"steps":[],"time":[],"collisions":[],"found_all_rewards":[],"max_steps":[]}
 
 
-    for seed in range(15):
 
-        rewards,obstacles_map = init_random_reachable_map(n, 
-                                    "block", 
-                                    min_obstacles, 
-                                    max_obstacles, 
-                                    obstacle_type="block", 
-                                    obstacle_map=None, 
-                                    seed=seed,
-                                    num_reward_blocks=(3,5),
-                                    reward_square_size=(3,5),
-                                    obstacle_cluster_prob=0.2,
-                                    obstacle_square_sizes=(1,4))
-        
-        rewards[0,0] = 0
 
-        if np.all(rewards == 0):
-            print("No rewards")
-            continue
-        
+    rewards,obstacles_map = init_random_reachable_map(n, 
+                                "block", 
+                                min_obstacles, 
+                                max_obstacles, 
+                                obstacle_type="block", 
+                                obstacle_map=None, 
+                                seed=seed,
+                                num_reward_blocks=(2,5),
+                                reward_square_size=(1,2),
+                                obstacle_cluster_prob=0.0,
+                                obstacle_square_sizes=(1,2))
     
-        
-        # rewards = rewards * 100 
-
-        # rewards = np.zeros(shape=(n,n))
-        # rewards[4,5] = 1
-        # rewards[2,5] = 0.2
-        # rewards[4,2] = 1
-        # rewards[2,1] = 0.5
-        # # rewards[3,4] = 0.5
-        # rewards[10,5] = 10
-
-        # rewards[5,10] = 10
-
-        # print(rewards)
-        # print(obstacles_map)
-
-        for i in range(n):
-            for j in range(n):
-                if obstacles_map[i,j] == 1:
-                    assert rewards[i,j] == 0
-
-        # rewards = np.zeros(shape=(n,n))
-        # rewards[3,0] = 1
+    rewards[0,0] = 0
 
 
+    # rewards = rewards * 100 
 
+    rewards = np.zeros(shape=(n,n))
+    rewards[4,1] = 0.2
+    rewards[4,4] = 0.8
+    # rewards[4,5] = 1
+    # rewards[2,5] = 0.2
+    # rewards[4,2] = 1
+    # rewards[2,1] = 0.5
+    # # rewards[3,4] = 0.5
+    # rewards[10,5] = 10
 
-        config = parser.parse_args()
+    # rewards[5,10] = 10
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # print(rewards)
+    # print(obstacles_map)
 
-        vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True, map_location=device)
-        #vin_weights  = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_full_traj.pth', weights_only=True, map_location=device)
-        vin = VIN(config)
+    for i in range(n):
+        for j in range(n):
+            if obstacles_map[i,j] == 1:
+                assert rewards[i,j] == 0
 
-        vin.load_state_dict(vin_weights)
-
-        vin.to(device)
-        vin.eval()
-        
-        
-        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
-
-        #visualize_rewards(rewards,obstacles_map,start,goal)
-        # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
-        env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
-        env = WrapForMCTS(env)
-
-        print(env.get_state_space_size())
-
-        #env = gym.make("FrozenLake-v1",is_slippery=True,render_mode="ansi")
-
-        r = []
+    # rewards = np.zeros(shape=(n,n))
+    # rewards[3,0] = 1
 
 
 
-        total_reward = 0
-        observation, _ = env.reset()
-        mcts = MCTS(env,observation,d=100,m=500,c=1.4,gamma=0.99999,puct=False,temperature=100)
 
-        step = 0
-        collisions = 0  
-        done = False
-        # This is an upper bound on the size of the state space.
-        # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
-        start = time.time()
-        while step < max_steps and not done:
-            visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+    config = parser.parse_args()
 
-            # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
-            # assert mcts.root.state == observation, "Root state must match observation!"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            action = mcts.act(observation, forward=False)
-            observation,reward,done,_,info = env.step(action)
+    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True, map_location=device)
+    #vin_weights  = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_full_traj.pth', weights_only=True, map_location=device)
+    vin = VIN(config)
 
-            if info["collision"]:
-                collisions += 1
-        
-            total_reward += reward
-            step += 1
+    vin.load_state_dict(vin_weights)
+
+    vin.to(device)
+    vin.eval()
+    
+    
+    start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+
+    #visualize_rewards(rewards,obstacles_map,start,goal)
+    # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
+    env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
+    env = WrapForMCTS(env)
+
+    print(env.get_state_space_size())
+
+    #env = gym.make("FrozenLake-v1",is_slippery=True,render_mode="ansi")
+
+    r = []
+
+    total_reward = 0
+    observation, _ = env.reset()
+    mcts = MCTS(env,observation,d=100,m=500,c=1.4,gamma=0.999,puct=False,temperature=1.0 )
+
+    step = 0
+    collisions = 0  
+    done = False
+    # This is an upper bound on the size of the state space.
+    # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
+    start = time.time()
+    while step < max_steps and not done:
+        #visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+
+        # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
+        # assert mcts.root.state == observation, "Root state must match observation!"
+
+        action = mcts.act(observation, forward=False)
+        observation,reward,done,_,info = env.step(action)
+
+        if info["collision"]:
+            collisions += 1
+    
+        total_reward += reward
+        step += 1
+
+        print(f"\rStep count {step}",end="",flush=True)
+
+    
+    print("reward: ",total_reward)
 
 
-        end = time.time()
-
-
-        ###### Popluate table #######
-
-        table["seed"].append(seed)
-        table["reward"].append(total_reward)
-        table["steps"].append(step)
-        table["time"].append(end-start)
-        table["collisions"].append(collisions)
-
-        if done:
-            table["found_all_rewards"].append(1)
-
-        else:
-            table["found_all_rewards"].append(0)
-
-        if step == max_steps:
-            table["max_steps"].append(1)
-        else:
-            table["max_steps"].append(0)
-
-        
-
-
-    print(table)
-
+   
 
 
 

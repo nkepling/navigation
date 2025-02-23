@@ -12,8 +12,6 @@ from tqdm import tqdm
 import multiprocessing
 from multiprocessing import Pool
 
-
-
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from utils import init_random_reachable_map
@@ -60,6 +58,54 @@ def make_env(seed,config):
     
     collision_penalty = config["collision_penalty"]
     
+    env = GridworldEnv(rewards,obstacles_map,start_pos=(0,0),goal_pos=(n-1,n-1),living_reward=living_reward,collision_penalty=collision_penalty)
+    wrapped_env = WrapForMCTS(env)
+    return wrapped_env
+
+def make_static_env_5x5(seed,config):
+    """This is simply a function to create a static environment for the 
+    """
+    seed = config["seed"] # just so we keep the same interface....
+    n = config["n"]
+    rewards_config = config["rewards_config"]
+    min_obstacles = config["min_obstacles"]
+    max_obstacles = config["max_obstacles"]
+
+    num_reward_blocks = config["num_reward_blocks"]
+    reward_square_size = config["reward_square_size"]
+    obstacle_type = config["obstacle_type"]
+
+    #obstacle_map = config["obstacle_map"]
+    obstacle_cluster_prob = config["obstacle_cluster_prob"] 
+    obstacle_square_sizes = config["obstacle_square_sizes"] 
+
+    living_reward = config["living_reward"]
+
+
+    rewards,obstacles_map = init_random_reachable_map(n=n,
+                                                      rewards_config=rewards_config,
+                                                      min_obstacles=min_obstacles,
+                                                      max_obstacles=max_obstacles,
+                                                      obstacle_type=obstacle_type,
+                                                      seed=seed,
+                                                      num_reward_blocks=num_reward_blocks,
+                                                      reward_square_size=reward_square_size,
+                                                      obstacle_cluster_prob=obstacle_cluster_prob,    
+                                                      obstacle_square_sizes=obstacle_square_sizes
+                                                      )
+    
+    
+    collision_penalty = config["collision_penalty"]
+
+
+    rewards = np.zeros(shape=(n,n))
+
+    reward_coords = config["reward_coords"]
+    reward_values = config["reward_values"]
+    
+    for ind,(x,y) in enumerate(reward_coords):
+        rewards[x,y] = reward_values[ind]
+
     env = GridworldEnv(rewards,obstacles_map,start_pos=(0,0),goal_pos=(n-1,n-1),living_reward=living_reward,collision_penalty=collision_penalty)
     wrapped_env = WrapForMCTS(env)
     return wrapped_env
@@ -170,5 +216,6 @@ def run_experiment(config,new_agent_func):
     filename = "experiments/results/" + config["experiment_name"] + ".csv"
     path = pathlib.Path(filename)
     save_file(results,path)  # Save results to CSV
+
 
 
