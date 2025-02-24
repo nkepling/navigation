@@ -6,34 +6,23 @@ from utils import *
 from eval import get_vi_path
 from nn_training import * 
 import argparse
-import tqdm
+from tqdm import tqdm
 import fo_solver
 
-# Define the input map
-n = 50 # size of the grid
-config = "block"  # distribution of positive probability cells
-num_blocks = 3  # number of positive region blocks
-# num_obstacles = 3  # number of obstacles
-obstacle_type = "block"
-square_size = 4  # size of the positive region square
+from multiprocessing import Pool
 
-min_obstacles = 10
-max_obstacles = 20
-# Discount factor
-gamma = 0.9
 
 # define experiment configuration
 # random_map = True
 
-def get_full_trajectory(n, rewards, obstacles_map, neighbors, start):
+def get_full_trajectory(n, config,rewards, obstacles_map, neighbors, start):
     agent_position = deepcopy(start)
     steps = 0
-    max_steps = 1000
+    max_steps = config["max_steps"]
+    gamma = config["gamma"]
+
     path = [agent_position]
     reward_map_list = []
-
-    # Ensure obstacles_map has the shape (1, n, n) for concatenation
-
 
     while np.any(rewards) and steps < max_steps:
         # Zero out the reward at the current agent's position
@@ -77,7 +66,6 @@ def extract_action(traj):
 
     return np.array(actions)
 
-
 def sample_trajectories(num_trajectories,reward,obstacle_map):
     """Grab trajectories from the dynamic programming solution to the value iteration problem.  The trajectories are used to train the VIN model.
     states_xy is a list off coordinates from start to goal. 
@@ -93,114 +81,100 @@ def sample_trajectories(num_trajectories,reward,obstacle_map):
     # states_xy = np.array(states_xy)
     return states_xy
 
-
-
-
-
-
 """
 Generate dataset for training the VIN model.  The inputs are images whre one channel encoodes the agent position and the other channel encodes the reward map.
 The reward image encodes both the obstacles and the rewards map.
 """
 
-def vin_data(n_rewards, seeds,num_reward_variants=7):
-    # with open("obstacle.pkl", "rb") as f:
-    #     obstacle_map = pickle.load(f)
+def single_seed_vin_data(seed,config):
+    n = config["n"]
+    rewards_config=config["rewards_config"]
+    min_obstacles=config["min_obstacles"]
+    max_obstacles=config["max_obstacles"]
+    obstacle_type=config["obstacle_type"]
+
+    num_reward_blocks=config["num_reward_blocks"]
+    reward_square_size=config["reward_square_size"]
+    obstacle_cluster_prob=config["obstacle_cluster_prob"]
+    obstacle_square_sizes=config["obstacle_square_sizes"]
+    num_reward_variants = config["num_reward_variants"]
+    obstacle_map = config["obstacle_map"]
 
     X = []
     S1 = []
     S2 = []
     Labels = []
 
-    with tqdm.tqdm(total=len(seeds)) as pbar_obs:  # Corrected `seeds` for progress bar
-        for seed in seeds:
+    reward, obstacle_map = init_random_reachable_map(n = n,
+                                                    rewards_config=rewards_config,
+                                                    min_obstacles=min_obstacles,
+                                                    max_obstacles=max_obstacles,
+                                                    obstacle_type=obstacle_type,
+                                                    obstacle_map=obstacle_map,
+                                                    seed=seed,
+                                                    num_reward_blocks=num_reward_blocks,
+                                                    reward_square_size=reward_square_size,
+                                                    obstacle_cluster_prob=obstacle_cluster_prob,
+                                                    obstacle_square_sizes=obstacle_square_sizes
+                                                    )
+    
+    neighbors = precompute_next_states(n , obstacle_map) 
 
+    # For each map configuration, create `num_reward_variants` different reward distributions
+    for variant in range(num_reward_variants):
+    
+        reward, obstacle_map = init_random_reachable_map(n = n,
+                                                        rewards_config=rewards_config,
+                                                        min_obstacles=min_obstacles,
+                                                        max_obstacles=max_obstacles,
+                                                        obstacle_type=obstacle_type,
+                                                        obstacle_map=obstacle_map,
+                                                        seed=seed,
+                                                        num_reward_blocks=num_reward_blocks,
+                                                        reward_square_size=reward_square_size,
+                                                        obstacle_cluster_prob=obstacle_cluster_prob,
+                                                        obstacle_square_sizes=obstacle_square_sizes
+                                                        )
+        
+        if np.sum(reward) == 0:
+            print("No reward skipping")
+            continue
 
-            # Generate a fixed obstacle map for the seed
-            #reward, obstacle_map = init_random_reachable_map(n, "block", num_blocks, min_obstacles, max_obstacles, obstacle_type="block", square_size=10, obstacle_map=None, seed=seed)
-            reward, obstacle_map = init_random_reachable_map(n, 
-                                                           "block", 
-                                                           5, 
-                                                           min_obstacles, 
-                                                           max_obstacles, 
-                                                           obstacle_type="block", 
-                                                           square_size=25, 
-                                                           obstacle_map=None, 
-                                                           seed=seed, 
-                                                           num_reward_blocks=(2,20), 
-                                                           reward_square_size=(2,20), 
-                                                           obstacle_cluster_prob=0.4, 
-                                                           obstacle_square_sizes=(3,20))
-            
-            neighbors = precompute_next_states(n , obstacle_map)  # Using `n` instead of hardcoded 10 for consistency
-            
-           
-            # For each map configuration, create `num_reward_variants` different reward distributions
-            for variant in range(num_reward_variants):
-                prev_reward = reward  # Keep a copy of the original reward map if needed
-                
-                # Generate a different reward map for each variant
-                #reward, obstacle_map = init_reachable_map(n, config, num_blocks, num_obstacles, obstacle_type, obstacle_map=obstacle_map)
-                reward, obstacle_map = init_random_reachable_map(50, 
-                                                           "block", 
-                                                           5, 
-                                                           min_obstacles, 
-                                                           max_obstacles, 
-                                                           obstacle_type="block", 
-                                                           square_size=25, 
-                                                           obstacle_map=obstacle_map, 
-                                                           seed=seed, 
-                                                           num_reward_blocks=(2,20), 
-                                                           reward_square_size=(2,20), 
-                                                           obstacle_cluster_prob=0.4, 
-                                                           obstacle_square_sizes=(3,20))
-                
-                if np.sum(reward) == 0:
-                    print("No reward skipping")
-                    continue
+        # Get trajectories and reward maps
+        states_xy, reward_list = get_full_trajectory(n, config, reward.copy(), obstacle_map, neighbors, start=(0, 0))
+        
+        # Skip empty reward lists (i.e., no trajectory or no rewards)
+        if len(reward_list) == 0:
+            print(f"Skipping empty trajectory for seed {seed}, variant {variant}")
+            continue
+        
+        skip_variant = False
 
-                # Get trajectories and reward maps
-                states_xy, reward_list = get_full_trajectory(50, reward.copy(), obstacle_map, neighbors, start=(0, 0))
-                
-                # Skip empty reward lists (i.e., no trajectory or no rewards)
-                if len(reward_list) == 0:
-                    print(f"Skipping empty trajectory for seed {seed}, variant {variant}")
-                    continue
-                
+        state_diff = np.diff(states_xy, axis=0)  # Calculate state transitions
+        for i in range(len(state_diff)):
+            diff = tuple(state_diff[i])
+            if diff == (0, 0):
+                print(f"Skipping (0, 0) movement at step {i}")
+                skip_variant = True
+                break
+        
+        if skip_variant:
+            continue 
 
-                skip_variant = False
+        actions = extract_action(states_xy)  # Extract actions from the trajectory
+        states_xy = states_xy[:-1]  # Remove last state as it corresponds to the final state
+        assert reward_list.shape == (len(states_xy), 2, n, n), f"reward_list shape {reward_list.shape}"
 
-                state_diff = np.diff(states_xy, axis=0)  # Calculate state transitions
-                for i in range(len(state_diff)):
-                    diff = tuple(state_diff[i])
-                    if diff == (0, 0):
-                        print(f"Skipping (0, 0) movement at step {i}")
-                        skip_variant = True
-                        break
-                
-                if skip_variant:
-                    continue 
+        # Prepare the data
+        S1_cur = np.expand_dims(states_xy[:, 0], axis=1)  # x coordinates
+        S2_cur = np.expand_dims(states_xy[:, 1], axis=1)  # y coordinates
+        Labels_cur = np.expand_dims(actions, axis=1)  # actions taken
 
-                
-                actions = extract_action(states_xy)  # Extract actions from the trajectory
-                states_xy = states_xy[:-1]  # Remove last state as it corresponds to the final state
-                assert reward_list.shape == (len(states_xy), 2, n, n), f"reward_list shape {reward_list.shape}"
-
-                ns = len(states_xy)  # Number of states in trajectory
-                
-                # Prepare the data
-                S1_cur = np.expand_dims(states_xy[:, 0], axis=1)  # x coordinates
-                S2_cur = np.expand_dims(states_xy[:, 1], axis=1)  # y coordinates
-                Labels_cur = np.expand_dims(actions, axis=1)  # actions taken
-
-                # Append the data to lists
-                X.append(reward_list)
-                S1.append(S1_cur)
-                S2.append(S2_cur)
-                Labels.append(Labels_cur)
-
-
-            pbar_obs.update(1)
+        # Append the data to lists
+        X.append(reward_list)
+        S1.append(S1_cur)
+        S2.append(S2_cur)
+        Labels.append(Labels_cur)
 
     # Concatenate all data
     X = np.concatenate(X, axis=0)
@@ -208,40 +182,68 @@ def vin_data(n_rewards, seeds,num_reward_variants=7):
     S2 = np.concatenate(S2, axis=0)
     Labels = np.concatenate(Labels, axis=0)
 
-    print("X shape: ", X.shape)
-    print("S1 shape: ", S1.shape)
-    print("S2 shape: ", S2.shape)
-    print("Labels shape: ", Labels.shape)
-
     return X, S1, S2, Labels
 
+def data_gen_wrapper(args):
+    return single_seed_vin_data(*args)
 
-def main(n_train, n_test, save_path, train_seeds,test_seeds,num_reward_variants=7):
-    os.makedirs("vin_data", exist_ok=True)
+def vin_data(seeds,config):
+
+    num_workers = config["num_workers"]
+
+    results = []
+    with Pool(num_workers) as pool, tqdm(total=len(seeds)) as pbar:
+        for result in pool.imap_unordered(data_gen_wrapper,[(seed,config) for seed in seeds]):
+            results.append(result)
+            pbar.update(1)
+
+    print(len(results))
+
+    X_list, S1_list, S2_list, Labels_list = zip(*results)
+
+    X = np.concatenate(X_list, axis=0)
+    S1 = np.concatenate(S1_list, axis=0)
+    S2 = np.concatenate(S2_list, axis=0)
+    Labels = np.concatenate(Labels_list, axis=0)
+    return X, S1, S2, Labels
+
+def main(save_path, train_seeds,test_seeds,config):
     print("Generating training data for VIN model")
-    X, S1, S2, Labels = vin_data(n_train, train_seeds, num_reward_variants)  # 10 reward variants per map config
+    X, S1, S2, Labels = vin_data(train_seeds,config)  # 10 reward variants per map config
     print("Generating test data")
-    X_test, S1_test, S2_test, Labels_test = vin_data(n_test,test_seeds, num_reward_variants=10)  # 10 reward variants per map config
+    X_test, S1_test, S2_test, Labels_test = vin_data(test_seeds,config)  # 10 reward variants per map config
     np.savez_compressed(save_path, X, S1, S2, Labels, X_test, S1_test, S2_test, Labels_test)
 
     print(f"Saved data to {save_path}")
     return X, S1, S2, Labels
-if __name__ == "__main__":
 
-    num_trajectories = 3 # number of trajectories to sample from each reward map
-    #n_rewards = 3 # numerb of reward maps to generate
-    n_train = 2
-    n_test = 2
+if __name__ == "__main__":
+    import argparse
+    from experiments.experiment_setup import read_config
+
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_path',type=str,required=True)
+    args = parser.parse_args()
+    config = read_config(args.config_path)
+
+    n_train = config["n_train"]
+    n_test = config["n_test"]
+    num_reward_variants = config["num_reward_variants"]
     #n_rewards = 3
+
+    dataset_name = config["dataset_name"]
 
     train_seeds = [x for x in range(n_train)]
     test_seeds = [x for x in range(n_train+1,n_test+n_train)]
 
+    os.makedirs("training_data",exist_ok=True)
 
-    save_path = "training_data/50by50.npz"
-    X,S1,S2,Labels = main(n_train,n_test,save_path,train_seeds,test_seeds,num_reward_variants=2)
-    # X,S1,S2,Labels = vin_data(num_trajectories,n_rewards)
+    save_path = "training_data/" + dataset_name + ".npz"
 
+    
+    X,S1,S2,Labels = main(save_path,train_seeds,test_seeds,config)
     
     print("X ",X.shape)
     print("S1 ",S1.shape)
