@@ -66,9 +66,6 @@ class GridworldData(data.Dataset):
             print("Number of Test Samples: {0}".format(images.shape[0]))
         return images, S1, S2, labels
     
-class ObstacleFreeData(data.Dataset):
-    def __init__(self)
-
 
 class ANSR_Data(data.Dataset):
     def __init__(self,

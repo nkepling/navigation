@@ -14,6 +14,7 @@ from utility.utils import *
 from model import *
 import os
 import sys
+import yaml
 
 
 class EarlyStopping:
@@ -25,6 +26,11 @@ class EarlyStopping:
         self.best_loss = None
         self.early_stop = False
         self.path = path
+
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.checkpoints_dir = os.path.join(script_dir, "checkpoints")
+        os.makedirs(self.checkpoints_dir, exist_ok=True)
 
     def __call__(self, epoch, val_loss, model):
         if epoch < self.warmup_epochs:
@@ -46,7 +52,7 @@ class EarlyStopping:
 
     def save_checkpoint(self, model):
         '''Save the model when validation loss improves.'''
-        torch.save(model.state_dict(),"../model_weights/" + self.path+".pth")
+        torch.save(model.state_dict(), os.path.join(self.checkpoints_dir, self.path+".pth"))
         print(f"Model saved at epoch with validation loss: {self.best_loss:.4f}")
 
     
@@ -73,7 +79,7 @@ def train(net: VIN, trainloader, testloader,config, criterion, optimizer):
     else:
         device = torch.device("cpu")
 
-    early_stopping = EarlyStopping(patience=10, delta=0.001, path='vin_all_obs')
+    early_stopping = EarlyStopping(patience=config.patience, delta=config.delta, path=config.model_name)
     train_losses = []
     val_losses = []
     for epoch in range(config.epochs):  # Loop over dataset multiple times
@@ -179,54 +185,45 @@ def test(net: VIN, testloader, config):
 
 
 
-def parse_args():
-       # Handle file-based arguments
-    new_args = []
-    for arg in sys.argv[1:]:
-        if arg.startswith('@'):
-            with open(arg[1:], 'r') as f:
-                # Add each line in the file to the arguments list, splitting by whitespace
-                new_args.extend(f.read().split())
-        else:
-            new_args.append(arg)
-
+def read_config(config_path):
+    with open(config_path,'r') as file:
+        config = yaml.safe_load(file)
+    return(config)
 
 if __name__ == '__main__':
     # Parsing training parameters
+    from types import SimpleNamespace
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--datafile',
         type=str,
-        default='/media/vanderbilt/home/nkepling/fullyObservableNavigation/training_data/20by20.npz',
         help='Path to data file')
-    parser.add_argument('--imsize', type=int, default=20, help='Size of image')
     parser.add_argument(
-        '--lr',
-        type=float,
-        default=0.001,
-        help='Learning rate, [0.01, 0.005, 0.002, 0.001]')
-    parser.add_argument(
-        '--epochs', type=int, default=300, help='Number of epochs to train')
-    parser.add_argument(
-        '--k', type=int, default=50, help='Number of Value Iterations')
-    parser.add_argument(
-        '--l_i', type=int, default=2, help='Number of channels in input layer')
-    parser.add_argument(
-        '--l_h',
-        type=int,
-        default=150,
-        help='Number of channels in first hidden layer')
-    parser.add_argument(
-        '--l_q',
-        type=int,
-        default=4,
-        help='Number of channels in q layer (~actions) in VI-module')
-    parser.add_argument(
-        '--batch_size', type=int, default=128, help='Batch size')
-    config = parser.parse_args()
-    # Get path to save trained model
-    # save_path = "trained/vin_{0}x{0}.pth".format(config.imsize)
-    save_path = "trained/vin_20x20_k_50.pth"
+        '--config_file',
+        type=str,
+        help='Path to the training params file'
+    )
+
+    args = parser.parse_args()
+
+    training_params_dict = read_config(args.config_file)
+
+    config = SimpleNamespace(**training_params_dict)
+    config.datafile = args.datafile
+
+    model_name = config.model_name
+
+    
+
+    
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    final_save_dir = os.path.join(script_dir, "trained")
+    os.makedirs(final_save_dir, exist_ok=True) 
+
+    save_path = os.path.join(final_save_dir,config.model_name + ".pth")
+
     # Instantiate a VIN model
     net = VIN(config)
     # Loss
@@ -237,6 +234,7 @@ if __name__ == '__main__':
     # Dataset transformer: torchvision.transforms
     transform = None
     # Define Dataset
+
     trainset = GridworldData(
         config.datafile, imsize=config.imsize, train=True, transform=transform)
     testset = GridworldData(
@@ -248,9 +246,9 @@ if __name__ == '__main__':
 
     # print(len(trainset))
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=config.batch_size, shuffle=True, num_workers=0)
+        trainset, batch_size=config.batch_size, shuffle=True)
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=config.batch_size, shuffle=False, num_workers=0)
+        testset, batch_size=config.batch_size, shuffle=False)
 
 
     
