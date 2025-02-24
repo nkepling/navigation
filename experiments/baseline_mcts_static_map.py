@@ -29,7 +29,7 @@ def main(config_path):
     print("Running baseline MCTS experiment.")
     config  = read_config(config_path)
     agent_factory = create_agent()
-    run_experiment(config,agent_factory)
+    run_experiment(config,agent_factory,static=True)
     
 if __name__ == '__main__':
     import argparse

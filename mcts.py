@@ -122,8 +122,8 @@ class MCTS:
         # set random seed
 
         if seed is not None:
-            np.random.seed(seed=seed)
-            random.seed(seed=seed)
+            np.random.seed(seed)
+            random.seed(seed)
 
         self.v0 = DecisionNode(parent=None,state=state,weight=1,is_terminal=False,reward=0)
 
@@ -138,7 +138,7 @@ class MCTS:
 
         self.heuristic = heuristic  
 
-    def search(self):
+    def search(self, **kwargs):
         """Do the MCTS by doing m simulations from the current state s. 
         After doing m simulations we simply choose the action that maximizes the estimate of Q(s,a)
 

@@ -3,18 +3,19 @@ import os
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from mcts import MCTS
+from stl_mcts import STLMCTS
 from tqdm import tqdm
-from .experiment_setup import read_config,run_experiment
+from .experiment_setup import read_config,run_experiment,run_static_episode
 
 def new_mcts_agent(env,state,config,seed=None):
-        return MCTS(env=env,
+        return STLMCTS(env=env,
                     state=state,
                     d=config["d"],
                     m=config["m"],
                     c=config["c"],
                     gamma=config["gamma"],
                     heuristic=config["heuristic"],
+                    c_heuristic=config["c_heuristic"],
                     vin=config["vin"],
                     puct=config["puct"],
                     temperature=config["temperature"],
@@ -24,12 +25,13 @@ def new_mcts_agent(env,state,config,seed=None):
 def create_agent():
      return new_mcts_agent
 
-
 def main(config_path):
     print("Running baseline MCTS experiment.")
     config  = read_config(config_path)
     agent_factory = create_agent()
-    run_experiment(config,agent_factory)
+    run_experiment(config,agent_factory,static=True)
+
+
     
 if __name__ == '__main__':
     import argparse

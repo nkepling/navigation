@@ -1,5 +1,5 @@
 #Experiments parameters
-experiment_name: "static_env_baseline_mcts_5x5"
+experiment_name: "static_env_baseline_stl_mcts_5x5"
 env_seed: 27
 num_workers: 30 
 max_steps: 100
@@ -40,12 +40,14 @@ areas_of_interest:
 area_of_interest_weight:
   - 1.0
 
+
 static_env: True
 
 #MCTS parameters
 d: 100
 m: 500
 c: 1.4
+c_heuristic: 0.5
 gamma: 0.999
 heuristic: False
 puct: False

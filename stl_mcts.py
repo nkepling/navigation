@@ -178,7 +178,7 @@ class STLMCTS(MCTS):
         traj = self._get_trace(v)
         # heuristic_value = sum([always_moving_toward_goal(traj,calculator)*w for calculator,w in self.heuristic_calculators ])
 
-        if areas_of_interest:
+        if self.areas_of_interest:
             heuristic_value = sum([negative_distance(traj,calculator)*w for calculator,w in self.heuristic_calculators ])
         else:
             return 0
@@ -329,52 +329,63 @@ if __name__ == "__main__":
     from mcts import MCTS
 
     config = read_config("/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/experiments/configs/static_env_baseline_mcts_5x5.yaml")
-    env = make_static_env_5x5(27,config)
+    env = make_env(27,config)
 
-    obs,_ = env.reset()
-    intit_states = env.get_state()
+    reward_list = []
 
-    obstacles_map = intit_states["obstacles"]
+    for seed in range(25):
 
-    mcts = STLMCTS(env,obs,d=100,m=500,c=1.44,gamma=0.999,c_heuristic=0.5)
-    #mcts = MCTS(env,obs,d=100,m=500,c=1.4,gamma=0.999)
+        obs,_ = env.reset(seed=seed)
+        intit_states = env.get_state()
 
-    step = 0 
-    collisions = 0  
-    done = False
-    # This is an upper bound on the size of the state space.
-    # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
-    max_steps  = 100
-    total_reward = 0
-    start = time.time()
+        obstacles_map = intit_states["obstacles"]
 
-    areas_of_interest = [((4,4),1.0)]
+        mcts = STLMCTS(env,obs,d=100,m=500,c=1.44,gamma=0.999,c_heuristic=0.5,seed=seed)
+        #mcts = MCTS(env,obs,d=100,m=500,c=1.4,gamma=0.999)
 
-    while step < max_steps and not done:
-        visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
+        step = 0 
+        collisions = 0  
+        done = False
+        # This is an upper bound on the size of the state space.
+        # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
+        max_steps  = 100
+        total_reward = 0
+        start = time.time()
 
-        # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
-        # assert mcts.root.state == observation, "Root state must match observation!"
+        areas_of_interest = [((4,4),1.0)]
 
-        action = mcts.act(obs,areas_of_interest=areas_of_interest, forward=False)
-        # action = mcts.act(obs)
-        obs,reward,done,_,info = env.step(action)
+        while step < max_steps and not done:
+            visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
 
-        # Check if the agent has reached an area of interest
-        current_position = obs[1]
-        areas_of_interest = [(aoi, w) for aoi, w in areas_of_interest if not np.array_equal(current_position, aoi)]
+            # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
+            # assert mcts.root.state == observation, "Root state must match observation!"
+
+            action = mcts.act(obs,areas_of_interest=areas_of_interest, forward=False)
+            # action = mcts.act(obs)
+            obs,reward,done,_,info = env.step(action)
+
+            # Check if the agent has reached an area of interest
+            current_position = obs[1]
+            areas_of_interest = [(aoi, w) for aoi, w in areas_of_interest if not np.array_equal(current_position, aoi)]
+
+            
 
 
-        if info["collision"]:
-            collisions += 1
-    
-        total_reward += reward
-        step += 1
+            if info["collision"]:
+                collisions += 1
+        
+            total_reward += reward
+            step += 1
 
-        print(f"\rStep count {step}",end="",flush=True)
+            print(f"\rStep count {step}",end="",flush=True)
 
-    
-    print("reward: ",total_reward)
+        
+        print("reward: ",total_reward)
+        reward_list.append(total_reward)
+
+    print("Mean reward: ", np.mean(reward_list))
+
+
 
 
 
