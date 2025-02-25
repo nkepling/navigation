@@ -4,8 +4,8 @@
 dataset_name: "5x5_map"
 #n_train: 1000
 #n_test: 500
-n_train: 1000
-n_test: 200
+n_train: 5000
+n_test: 1000
 num_workers: 30
 max_steps: 100
 
