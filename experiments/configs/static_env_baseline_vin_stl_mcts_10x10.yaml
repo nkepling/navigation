@@ -1,0 +1,66 @@
+#Experiments parameters
+experiment_name: "static_env_baseline_stl_mcts_10x10"
+env_seed: 200
+num_workers: 30 
+max_steps: 300
+#num_seeds: 150 
+num_seeds: 150
+num_workers: 30
+max_steps: 100
+seed_range: [10000, 20000]
+
+#Environment parameters
+n: 10
+rewards_config: "block"
+min_obstacles: 5
+max_obstacles: 10
+
+num_reward_blocks: [2,5]
+reward_square_size: [1,2]
+obstacle_type: "block"
+obstacle_map: null
+
+obstacle_cluster_prob: 0.0
+obstacle_square_sizes: [1,2]
+
+living_reward: 0
+collision_penalty: -0.1
+
+reward_coords: # what are the positive reward cells 
+  - [2,9]
+  - [6,4]
+  - [5,4]
+  - [5,3]
+  - [6,3]
+  - [8,7]
+
+reward_values:
+  - 0.3
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.3
+
+areas_of_interest:
+  - [4,4]
+
+area_of_interest_weight:
+  - 1.0
+
+static_env: True
+
+#MCTS parameters
+d: 100
+m: 500
+c: 1.4
+gamma: 0.999
+heuristic: False
+puct: False
+temperature: 1.0
+tree_depth: null
+vin: null
+
+#VIN parameters
+
+ 

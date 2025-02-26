@@ -6,7 +6,7 @@ import ns_gym as nsg
 import ns_gym.base as base
 import random
 from collections import defaultdict
-
+import torch
 
 
 # from nn_training import reformat_input
@@ -157,8 +157,14 @@ class MCTS:
 
 
 
-        action_values = [self.Qsa[(self.v0.state,a)] for a in self.possible_actions] # Q values for s a pairs
-        visit_counts = [self.Nsa[(self.v0.state,a)] for a in self.possible_actions]
+        # action_values = [self.Qsa[(self.v0.state,a)] for a in self.possible_actions] # Q values for s a pairs
+        # visit_counts = [self.Nsa[(self.v0.state,a)] for a in self.possible_actions]
+
+
+        action_values = [self.Qsa.get((self.v0.state, a), 0) for a in self.possible_actions] # Q values for s a pairs
+        visit_counts = [self.Nsa.get((self.v0.state, a), 0) for a in self.possible_actions]
+        # hueristic_scores = [self.Hsa.get((self.v0.state,a),0) for a in self.possible_actions]
+
         ba = np.argmax(visit_counts)
             
         # print(f"Visit counts: {visit_counts}")
@@ -199,11 +205,10 @@ class MCTS:
     def _simulation_policy(self,v:DecisionNode):
 
         if self.heuristic:
-            # _,R = self._vin_policy(v)
-            R = self._vin_rollout(v)
+            _,R = self._vin_policy(v)
+            # R = self._vin_rollout(v)
             return R
-        
-        
+    
         return self._default_policy(v)
     
     def _vin_policy(self,v:DecisionNode):
@@ -216,7 +221,7 @@ class MCTS:
 
         input = self._reformat_input(state_dict["rewards"],state_dict["obstacles"])
 
-        logits,probs,value = self.vin(input,torch.tensor(state_dict["agent_position"][0]),torch.tensor(state_dict["agent_position"][1]),k=50)
+        logits,probs,value = self.vin(input,torch.tensor(state_dict["agent_position"][0]),torch.tensor(state_dict["agent_position"][1]),k=16)
         x = state_dict["agent_position"][0]
         y = state_dict["agent_position"][1]        
         R = value[:, 0, x, y].item()
@@ -243,12 +248,12 @@ class MCTS:
             y = state_dict["agent_position"][1]        
 
             probs = probs.detach().numpy().squeeze()
-            # a = np.random.choice(self.possible_actions,p=probs)
-            a = np.argmax(probs)
+
+            a = np.random.choice(self.possible_actions,p=probs)
+            # a = np.argmax(probs)
             observation,reward,terminated,truncated,info = self.sim_env.step(a)
 
             vin_trajectory.append(reward*self.gamma**depth)
-
 
             if terminated or truncated:
                 break
@@ -577,7 +582,7 @@ if __name__ == "__main__":
 
     ### Gridworld parameters
 
-    parser.add_argument('--n', type=int, default=20, help='Grid size')
+    parser.add_argument('--n', type=int, default=5, help='Grid size')
     parser.add_argument('--obstacle_shape', type=str, default="block", help='Shape of obstacles')
     parser.add_argument('--num_obstacles', type=int, default=5, help='Number of obstacles')
     parser.add_argument('--min_obstacles', type=int, default=2, help='Minimum obstacles')
@@ -594,7 +599,7 @@ if __name__ == "__main__":
 
       
     # VIN-specific parameters
-    parser.add_argument('--k', type=int, default=50, help='Number of Value Iterations')
+    parser.add_argument('--k', type=int, default=16, help='Number of Value Iterations')
     parser.add_argument('--l_i', type=int, default=2, help='Number of channels in input layer')
     parser.add_argument('--l_h', type=int, default=150, help='Number of channels in first hidden layer')
     parser.add_argument('--l_q', type=int, default=4, help='Number of channels in q layer (~actions) in VI-module')
@@ -605,7 +610,7 @@ if __name__ == "__main__":
     
     #n = 20# size of the grid
     # n = 10
-    n = 6
+    # n = 6
     n= 5
 
     # n = 10
@@ -615,7 +620,10 @@ if __name__ == "__main__":
     max_steps = 100 # maximum number of steps to take
     step = 0 
 
-    seed = 27
+    # seed = 200
+    seed = 89
+
+
     # seed = 42
     
     # q
@@ -624,115 +632,123 @@ if __name__ == "__main__":
 
     table = {"seed":[],"reward":[],"steps":[],"time":[],"collisions":[],"found_all_rewards":[],"max_steps":[]}
 
+    for seed in range(10):
+        rewards,obstacles_map = init_random_reachable_map(n, 
+                                    "block", 
+                                    min_obstacles, 
+                                    max_obstacles, 
+                                    obstacle_type="block", 
+                                    obstacle_map=None, 
+                                    seed=seed,
+                                    num_reward_blocks=(2,5),
+                                    reward_square_size=(1,2),
+                                    obstacle_cluster_prob=0.0,
+                                    obstacle_square_sizes=(1,2))
+        
+        rewards[0,0] = 0
 
 
 
-    rewards,obstacles_map = init_random_reachable_map(n, 
-                                "block", 
-                                min_obstacles, 
-                                max_obstacles, 
-                                obstacle_type="block", 
-                                obstacle_map=None, 
-                                seed=seed,
-                                num_reward_blocks=(2,5),
-                                reward_square_size=(1,2),
-                                obstacle_cluster_prob=0.0,
-                                obstacle_square_sizes=(1,2))
+
+        # rewards = rewards * 100 
+
+        # rewards = np.zeros(shape=(n,n))
+
+        # rewards[2,9] = 0.3
+
+        # rewards[6,4] = 0.1
+        # rewards[6,3] = 0.1
+        # rewards[5,4] = 0.1
+        # rewards[5,3] = 0.1
+
+        # rewards[8,7] = 0.3
+
+        # rewards[4,1] = 0.2
+        # rewards[4,4] = 0.8
+        # rewards[4,5] = 1
+        # rewards[2,5] = 0.2
+        # rewards[4,2] = 1
+        # rewards[2,1] = 0.5
+        # # rewards[3,4] = 0.5
+        # rewards[10,5] = 10
+
+        # rewards[5,10] = 10
+
+        # print(rewards)
+        # print(obstacles_map)
+
+        for i in range(n):
+            for j in range(n):
+                if obstacles_map[i,j] == 1:
+                    assert rewards[i,j] == 0
+
+        # rewards = np.zeros(shape=(n,n))q
+        # rewards[3,0] = 1
+
+
+
+
+        config = parser.parse_args()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # device = "mps"
+
+        vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5_2.pth', weights_only=True, map_location=device)
+        #vin_weights  = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_full_traj.pth', weights_only=True, map_location=device)
+        vin = VIN(config)
+
+        vin.load_state_dict(vin_weights)
+
+        vin.to(device)
+        vin.eval()
+        
+        
+        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+
+        #visualize_rewards(rewards,obstacles_map,start,goal)
+        # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
+        env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
+        env = WrapForMCTS(env)
+
+        print(env.get_state_space_size())
+
+        #env = gym.make("FrozenLake-v1",is_slippery=True,render_mode="ansi")
+
+        r = []
+
+        total_reward = 0
+        observation, _ = env.reset()
+        mcts = MCTS(env,observation,d=10,m=100,c=1.4,gamma=0.9,puct=True,temperature=0.5,vin=vin,heuristic=False)
+
+        step = 0
+        collisions = 0  
+        done = False
+        # This is an upper bound on the size of the state space.
+        # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
+        start = time.time()
+        while step < max_steps and not done:
+            visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+
+            # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
+            # assert mcts.root.state == observation, "Root state must match observation!"
+
+            action = mcts.act(observation, forward=False)
+            observation,reward,done,_,info = env.step(action)
+
+            if info["collision"]:
+                collisions += 1
+        
+            total_reward += reward
+            step += 1
+
+            print(f"\rStep count {step}",end="",flush=True)
+
+        
+        print("reward: ",total_reward)
+
+
     
-    rewards[0,0] = 0
-
-
-    # rewards = rewards * 100 
-
-    rewards = np.zeros(shape=(n,n))
-    rewards[4,1] = 0.2
-    rewards[4,4] = 0.8
-    # rewards[4,5] = 1
-    # rewards[2,5] = 0.2
-    # rewards[4,2] = 1
-    # rewards[2,1] = 0.5
-    # # rewards[3,4] = 0.5
-    # rewards[10,5] = 10
-
-    # rewards[5,10] = 10
-
-    # print(rewards)
-    # print(obstacles_map)
-
-    for i in range(n):
-        for j in range(n):
-            if obstacles_map[i,j] == 1:
-                assert rewards[i,j] == 0
-
-    # rewards = np.zeros(shape=(n,n))
-    # rewards[3,0] = 1
-
-
-
-
-    config = parser.parse_args()
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/fullyObservableNavigation/pytorch_value_iteration_networks/trained/vin_20x20_k_50.pth', weights_only=True, map_location=device)
-    #vin_weights  = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_full_traj.pth', weights_only=True, map_location=device)
-    vin = VIN(config)
-
-    vin.load_state_dict(vin_weights)
-
-    vin.to(device)
-    vin.eval()
-    
-    
-    start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
-
-    #visualize_rewards(rewards,obstacles_map,start,goal)
-    # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
-    env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
-    env = WrapForMCTS(env)
-
-    print(env.get_state_space_size())
-
-    #env = gym.make("FrozenLake-v1",is_slippery=True,render_mode="ansi")
-
-    r = []
-
-    total_reward = 0
-    observation, _ = env.reset()
-    mcts = MCTS(env,observation,d=100,m=500,c=1.4,gamma=0.999,puct=False,temperature=1.0 )
-
-    step = 0
-    collisions = 0  
-    done = False
-    # This is an upper bound on the size of the state space.
-    # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
-    start = time.time()
-    while step < max_steps and not done:
-        #visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
-
-        # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
-        # assert mcts.root.state == observation, "Root state must match observation!"
-
-        action = mcts.act(observation, forward=False)
-        observation,reward,done,_,info = env.step(action)
-
-        if info["collision"]:
-            collisions += 1
-    
-        total_reward += reward
-        step += 1
-
-        print(f"\rStep count {step}",end="",flush=True)
-
-    
-    print("reward: ",total_reward)
-
-
-   
-
-
-
-
 
 
 
