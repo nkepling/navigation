@@ -4,7 +4,7 @@
 dataset_name: "10x10_map"
 #n_train: 1000
 #n_test: 500
-n_train: 10000
+n_train: 7000
 n_test: 2000
 num_workers: 30
 max_steps: 300
