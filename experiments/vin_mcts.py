@@ -26,7 +26,6 @@ def new_mcts_agent(env,state,config,seed=None):
                     puct=config["puct"],
                     temperature=config["temperature"],
                     seed=seed,
-                    heuristic=config["heuristic"],
                     device=config["device"],
                     k=config["k"]
                     )
