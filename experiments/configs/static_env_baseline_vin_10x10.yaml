@@ -1,19 +1,20 @@
 #Experiments parameters
 experiment_name: "static_env_baseline_vin_10x10"
-env_seed: 27
+env_seed: 200
 num_workers: 30 
-max_steps: 100
+max_steps: 300
 #num_seeds: 150 
 num_seeds: 150
 num_workers: 30
 max_steps: 100
 seed_range: [10000, 20000]
+device: "cuda"
 
 #Environment parameters
-n: 5
+n: 10
 rewards_config: "block"
-min_obstacles: 2
-max_obstacles: 3
+min_obstacles: 5
+max_obstacles: 10
 
 num_reward_blocks: [2,5]
 reward_square_size: [1,2]
@@ -27,12 +28,20 @@ living_reward: 0
 collision_penalty: -0.1
 
 reward_coords: # what are the positive reward cells 
-  - [4,1]
-  - [4,4]
+  - [2,9]
+  - [6,4]
+  - [5,4]
+  - [5,3]
+  - [6,3]
+  - [8,7]
 
 reward_values:
-  - 0.2
-  - 0.8
+  - 0.3
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.3
 
 areas_of_interest:
   - [4,4]

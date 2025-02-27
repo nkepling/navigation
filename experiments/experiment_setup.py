@@ -289,9 +289,21 @@ def save_file(results, filename):
     df = pd.DataFrame(results)  # Convert list of dictionaries to a DataFrame
     df.to_csv(filename, index=False)  # Save to CSV without row indices
 
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
 def save_file_to_json(results,filename):
     with open(filename,"w") as f:
-        json.dump(results,f,indent=4)
+        json.dump(results,f,indent=4,cls=NumpyEncoder)
 
 
 def run_experiment(config,new_agent_func,static=False):

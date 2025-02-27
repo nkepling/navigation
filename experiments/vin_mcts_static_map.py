@@ -27,7 +27,6 @@ def new_mcts_agent(env,state,config,seed=None):
                     puct=config["puct"],
                     temperature=config["temperature"],
                     seed=seed,
-                    heuristic=config["heuristic"],
                     device=config["device"],
                     k=config["k"]
                     )
@@ -37,9 +36,10 @@ def create_agent():
      return new_mcts_agent
 
 
-def main(config_path):
+def main(config_path,vin_model_weights):
     print("Running baseline MCTS experiment.")
     config  = read_config(config_path)
+    config["vin_model_weights"] = vin_model_weights
     agent_factory = create_agent()
     run_experiment(config,agent_factory,static=True)
     

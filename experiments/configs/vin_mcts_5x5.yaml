@@ -4,6 +4,7 @@ num_seeds: 150
 num_workers: 30 
 max_steps: 100
 seed_range: [10000, 20000]
+device: "cuda" 
 
 #Environment parameters
 n: 5
