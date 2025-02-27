@@ -87,7 +87,7 @@ class MCTS:
         Selection and expansion are combined into the "treepolicy method"
         The rollout/simluation is the "default" policy. 
     """
-    def __init__(self,env:gym.Env,state,d,m,c,gamma,heuristic=False,vin=None,puct=False,temperature=1.0,tree_depth=None,seed=None) -> None:
+    def __init__(self,env:gym.Env,state,d,m,c,gamma,heuristic=False,vin=None,puct=False,temperature=1.0,tree_depth=None,seed=None,device=None,k=None) -> None:
         """
         Args:
             env (gym.Env): The environment to run the MCTS on.
@@ -117,7 +117,19 @@ class MCTS:
         self.temperature = temperature
 
         if self.vin:
+            self.k = k
+            assert k != None, "k must be provided"
             vin.eval()
+            if device:
+                self.device = device
+            elif torch.cuda.is_available():
+                self.device = "cuda"
+            elif torch.backends.mps.is_available():
+                self.device = "mps"
+            else:
+                self.device = "cpu"
+
+            vin.to(self.device)
 
         # set random seed
 
@@ -219,14 +231,15 @@ class MCTS:
 
         state_dict = self.sim_env.unwrapped.get_state()
 
-        input = self._reformat_input(state_dict["rewards"],state_dict["obstacles"])
-
-        logits,probs,value = self.vin(input,torch.tensor(state_dict["agent_position"][0]),torch.tensor(state_dict["agent_position"][1]),k=16)
+        input,x,y = self._reformat_input(state_dict["rewards"],state_dict["obstacles"],state_dict["agent_position"])
+        logits,probs,value = self.vin(input,x,y,k=self.k)
         x = state_dict["agent_position"][0]
         y = state_dict["agent_position"][1]        
         R = value[:, 0, x, y].item()
 
-        probs = probs.detach().numpy().squeeze()
+
+
+        probs = probs.cpu().detach().numpy().squeeze()
 
         return probs,R
     
@@ -242,11 +255,11 @@ class MCTS:
         vin_trajectory = [] 
         while depth < self.d:
             state_dict = self.sim_env.unwrapped.get_state()
-            input = self._reformat_input(state_dict["rewards"],state_dict["obstacles"])
-            logits,probs,value = self.vin(input,torch.tensor(state_dict["agent_position"][0]),torch.tensor(state_dict["agent_position"][1]),k=50)
-            x = state_dict["agent_position"][0]
-            y = state_dict["agent_position"][1]        
-
+            input,x,y = self._reformat_input(state_dict["rewards"],state_dict["obstacles"],state_dict["agent_position"])
+            logits,probs,value = self.vin(input,x,y,k=self.k)
+            x = torch.tensor(state_dict["agent_position"][0])
+            y = torch.tensor(state_dict["agent_position"][1])    
+            
             probs = probs.detach().numpy().squeeze()
 
             a = np.random.choice(self.possible_actions,p=probs)
@@ -264,7 +277,7 @@ class MCTS:
         return R
 
     
-    def _reformat_input(self,rewards,obstacles):
+    def _reformat_input(self,rewards,obstacles,coords):
         """Reformat the input for the NN model
         """
         temp = torch.tensor(rewards, dtype=torch.float32).unsqueeze(0)
@@ -275,7 +288,17 @@ class MCTS:
 
         n  = len(obstacles)
         assert input.shape == (1,2,n,n)
-        return input
+
+        x = torch.tensor(coords[0])
+        y = torch.tensor(coords[1])
+
+
+        if self.device != "cpu":
+            input = input.to(self.device)
+            x = x.to(self.device)
+            y = y.to(self.device)
+
+        return input,x,y
 
 
     def _default_policy(self,v:DecisionNode):
@@ -632,6 +655,7 @@ if __name__ == "__main__":
 
     table = {"seed":[],"reward":[],"steps":[],"time":[],"collisions":[],"found_all_rewards":[],"max_steps":[]}
 
+    start_time = time.time()
     for seed in range(10):
         rewards,obstacles_map = init_random_reachable_map(n, 
                                     "block", 
@@ -692,6 +716,7 @@ if __name__ == "__main__":
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
         # device = "mps"
 
         vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5_2.pth', weights_only=True, map_location=device)
@@ -719,16 +744,16 @@ if __name__ == "__main__":
 
         total_reward = 0
         observation, _ = env.reset()
-        mcts = MCTS(env,observation,d=10,m=100,c=1.4,gamma=0.9,puct=True,temperature=0.5,vin=vin,heuristic=False)
+        mcts = MCTS(env,observation,d=15,m=100,c=1.4,gamma=0.9,puct=True,temperature=1,vin=vin,heuristic=False,k=16,device="mps")
 
         step = 0
         collisions = 0  
         done = False
         # This is an upper bound on the size of the state space.
         # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
-        start = time.time()
+
         while step < max_steps and not done:
-            visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+            # visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
 
             # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
             # assert mcts.root.state == observation, "Root state must match observation!"
@@ -746,6 +771,8 @@ if __name__ == "__main__":
 
         
         print("reward: ",total_reward)
+
+    print("Total Time, ", time.time() - start_time)
 
 
     

@@ -235,18 +235,11 @@ class STLMCTS(MCTS):
     def _selection(self, v: DecisionNode):
 
 
-        #TODO: only compute the heursitic after simulation ... then back propogat that "stl comnformatity value"
+         #TODO: only compute the heursitic after simulation ... then back propogat that "stl comnformatity value"
         assert isinstance(v,DecisionNode)
         best_value = -np.inf
         best_nodes = []
         children = v.children
-
-
-
-
-
-
-
 
         if self.puct:
             
@@ -277,7 +270,7 @@ class STLMCTS(MCTS):
                 # Option A: "Raise to 1/temperature" and re-normalize
                 policy_prior = policy_prior ** (1.0 / self.temperature)
                 # Re-normalize (avoid division by zero if policy_prior sums to 0)
-                sum_p = policy_prior.sum()
+                sum_p = policy_prior.sum()  
                 if sum_p > 0:
                     policy_prior /= sum_p
                 else:

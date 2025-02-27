@@ -8,6 +8,7 @@ import yaml
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import json
 
 import multiprocessing
 from multiprocessing import Pool
@@ -129,13 +130,16 @@ def run_episode(config,new_agent_func,seed,max_steps):
         "found_all_rewards": 0,
         "max_steps": 0,
         "num_reward_blocks": 0,
-        "num_obstacle_blocks": 0
+        "num_obstacle_blocks": 0,
+        "trajectory": []
     }
     
     
     # make env
     env = make_env(seed,config)
     obs,_ = env.reset(seed=seed)
+
+    result["trajectory"].append(obs[1])
 
     state_dict = env.get_state()
     num_reward_blocks = np.sum(state_dict["rewards"] > 0)
@@ -158,6 +162,7 @@ def run_episode(config,new_agent_func,seed,max_steps):
     while not done and steps < max_steps:
         action = agent.act(obs)
         obs,reward,done,_,info = env.step(action)
+        result["trajectory"].append(obs[1])
         total_reward += reward
         steps += 1
 
@@ -202,13 +207,16 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
         "found_all_rewards": 0,
         "max_steps": 0,
         "num_reward_blocks": 0,
-        "num_obstacle_blocks": 0
+        "num_obstacle_blocks": 0,
+        "trajectory": []
     }
     
     
     # make env
     env = make_env(seed,config)
     obs,_ = env.reset(seed=seed)
+
+    result["trajectory"].append(obs[1])
 
     state_dict = env.get_state()
     num_reward_blocks = np.sum(state_dict["rewards"] > 0)
@@ -233,6 +241,7 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
     while not done and steps < max_steps:
         action = agent.act(obs,areas_of_interest)
         obs,reward,done,_,info = env.step(action)
+        result["trajectory"].append(obs[1])
         total_reward += reward
         steps += 1
 
@@ -280,6 +289,11 @@ def save_file(results, filename):
     df = pd.DataFrame(results)  # Convert list of dictionaries to a DataFrame
     df.to_csv(filename, index=False)  # Save to CSV without row indices
 
+def save_file_to_json(results,filename):
+    with open(filename,"w") as f:
+        json.dump(results,f,indent=4)
+
+
 def run_experiment(config,new_agent_func,static=False):
 
     # Experiment parameters 
@@ -313,9 +327,11 @@ def run_experiment(config,new_agent_func,static=False):
     new_dir = os.path.join(dir_name,"results")
     os.makedirs(new_dir, exist_ok=True)
 
-    filename = "experiments/results/" + config["experiment_name"] + ".csv"
+    # filename = "experiments/results/" + config["experiment_name"] + ".csv"
+    filename = "experiments/results/" + config["experiment_name"] + ".json"
     path = pathlib.Path(filename)
-    save_file(results,path)  # Save results to CSV
+    save_file_to_json(results,path)  # Save results to CSV
+
 
 
 

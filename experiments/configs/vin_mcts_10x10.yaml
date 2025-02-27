@@ -1,11 +1,7 @@
 #Experiments parameters
-experiment_name: "static_env_baseline_vin_10x10"
-env_seed: 27
+experiment_name: "vin_mcts_10x10"
+num_seeds: 150 
 num_workers: 30 
-max_steps: 100
-#num_seeds: 150 
-num_seeds: 150
-num_workers: 30
 max_steps: 100
 seed_range: [10000, 20000]
 
@@ -26,22 +22,6 @@ obstacle_square_sizes: [1,2]
 living_reward: 0
 collision_penalty: -0.1
 
-reward_coords: # what are the positive reward cells 
-  - [4,1]
-  - [4,4]
-
-reward_values:
-  - 0.2
-  - 0.8
-
-areas_of_interest:
-  - [4,4]
-
-area_of_interest_weight:
-  - 1.0
-
-static_env: True
-
 #MCTS parameters
 d: 100
 m: 500
@@ -61,6 +41,8 @@ l_h: 150
 l_q: 4
 epochs: 1
 batch_sz: 1
+
+
 
 
 
