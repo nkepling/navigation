@@ -179,3 +179,5 @@ training_data/
 *.npy
 *.csv
 *.todo
+*.json
+
