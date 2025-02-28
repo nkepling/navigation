@@ -13,6 +13,8 @@ import json
 import multiprocessing
 from multiprocessing import Pool
 
+import torch.multiprocessing as mp
+
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from utils import init_random_reachable_map
@@ -156,13 +158,18 @@ def run_episode(config,new_agent_func,seed,max_steps):
     collisions = 0
 
 
-
-
     start = time.time() 
     while not done and steps < max_steps:
         action = agent.act(obs)
         obs,reward,done,_,info = env.step(action)
-        result["trajectory"].append(obs[1])
+        
+        if hasattr(agent,"history"):
+            current_position = obs[1]
+
+            agent.update_history(current_position)
+
+        result["trajectory"].append(current_position)
+
         total_reward += reward
         steps += 1
 
@@ -241,7 +248,14 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
     while not done and steps < max_steps:
         action = agent.act(obs,areas_of_interest)
         obs,reward,done,_,info = env.step(action)
-        result["trajectory"].append(obs[1])
+
+        if hasattr(agent,"history"):
+            current_position = obs[1]
+
+            agent.update_history(current_position)
+
+        result["trajectory"].append(current_position)
+
         total_reward += reward
         steps += 1
 

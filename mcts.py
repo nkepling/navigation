@@ -60,6 +60,9 @@ class DecisionNode:
 
         self.coord = state[1]
 
+
+
+
 class ChanceNode:
     """
     Chance node class, labelled by a state-action pair.
@@ -149,6 +152,7 @@ class MCTS:
         self.Ns = {} # stores visit counts for states, default to Ns of 0
 
         self.heuristic = heuristic  
+        self.vin_cache = {}
 
     def search(self, **kwargs):
         """Do the MCTS by doing m simulations from the current state s. 
@@ -229,17 +233,23 @@ class MCTS:
         assert isinstance(v,DecisionNode)
         # check if 
 
+
+
         state_dict = self.sim_env.unwrapped.get_state()
+        # key = tuple(state_dict)
+
+        # if key in self.vin_cache.keys():
+        #     return self.vin_cache[key]
+
 
         input,x,y = self._reformat_input(state_dict["rewards"],state_dict["obstacles"],state_dict["agent_position"])
         logits,probs,value = self.vin(input,x,y,k=self.k)
         x = state_dict["agent_position"][0]
         y = state_dict["agent_position"][1]        
         R = value[:, 0, x, y].item()
-
-
-
         probs = probs.cpu().detach().numpy().squeeze()
+
+        # self.vin_cache[key] = (probs,R)
 
         return probs,R
     
@@ -598,7 +608,11 @@ if __name__ == "__main__":
 
     import torch
     from pytorch_value_iteration_networks.model import *
-
+    from experiments.experiment_setup import *
+    from mcts import MCTS
+    from pytorch_value_iteration_networks.model import *
+    from types import SimpleNamespace
+    import torch
 
 
     parser = argparse.ArgumentParser()
@@ -651,25 +665,28 @@ if __name__ == "__main__":
     
     # q
     # seed = 199
-
+    config = read_config("/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/experiments/configs/static_env_baseline_vin_stl_mcts_5x5.yaml")
+    
+    seed = config["env_seed"]
+    env = make_env(seed,config)
 
     table = {"seed":[],"reward":[],"steps":[],"time":[],"collisions":[],"found_all_rewards":[],"max_steps":[]}
 
     start_time = time.time()
-    for seed in range(10):
-        rewards,obstacles_map = init_random_reachable_map(n, 
-                                    "block", 
-                                    min_obstacles, 
-                                    max_obstacles, 
-                                    obstacle_type="block", 
-                                    obstacle_map=None, 
-                                    seed=seed,
-                                    num_reward_blocks=(2,5),
-                                    reward_square_size=(1,2),
-                                    obstacle_cluster_prob=0.0,
-                                    obstacle_square_sizes=(1,2))
+    for i in range(27):
+        # rewards,obstacles_map = init_random_reachable_map(n, 
+        #                             "block", 
+        #                             min_obstacles, 
+        #                             max_obstacles, 
+        #                             obstacle_type="block", 
+        #                             obstacle_map=None, 
+        #                             seed=seed,
+        #                             num_reward_blocks=(2,5),
+        #                             reward_square_size=(1,2),
+        #                             obstacle_cluster_prob=0.0,
+        #                             obstacle_square_sizes=(1,2))
         
-        rewards[0,0] = 0
+        # rewards[0,0] = 0
 
 
 
@@ -701,13 +718,7 @@ if __name__ == "__main__":
         # print(rewards)
         # print(obstacles_map)
 
-        for i in range(n):
-            for j in range(n):
-                if obstacles_map[i,j] == 1:
-                    assert rewards[i,j] == 0
-
-        # rewards = np.zeros(shape=(n,n))q
-        # rewards[3,0] = 1
+ 
 
 
 
@@ -719,7 +730,7 @@ if __name__ == "__main__":
 
         # device = "mps"
 
-        vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5_2.pth', weights_only=True, map_location=device)
+        vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5.pth', weights_only=True, map_location=device)
         #vin_weights  = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_full_traj.pth', weights_only=True, map_location=device)
         vin = VIN(config)
 
@@ -729,12 +740,12 @@ if __name__ == "__main__":
         vin.eval()
         
         
-        start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
+        # start, goal = pick_start_and_goal(rewards, obstacles_map,seed=seed)
 
-        #visualize_rewards(rewards,obstacles_map,start,goal)
-        # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
-        env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
-        env = WrapForMCTS(env)
+        # #visualize_rewards(rewards,obstacles_map,start,goal)
+        # # env = ModifiedGridEnvironment(config,rewards,obstacles_map,start,goal,living_reward=-0.1,shuffle=False,train=False,max_steps=1000)
+        # env = GridworldEnv(rewards,obstacles_map,start,goal,living_reward=0.0)
+        # env = WrapForMCTS(env)
 
         print(env.get_state_space_size())
 
@@ -744,7 +755,7 @@ if __name__ == "__main__":
 
         total_reward = 0
         observation, _ = env.reset()
-        mcts = MCTS(env,observation,d=15,m=100,c=1.4,gamma=0.9,puct=True,temperature=1,vin=vin,heuristic=False,k=16,device="mps")
+        mcts = MCTS(env,observation,d=20,m=500,c=1.4,gamma=0.9,puct=True,temperature=0.8,vin=vin,heuristic=True,k=16,device="mps")
 
         step = 0
         collisions = 0  
@@ -753,7 +764,8 @@ if __name__ == "__main__":
         # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
 
         while step < max_steps and not done:
-            # visualize_rewards(env.unwrapped.current_rewards,obstacles_map,env.unwrapped.agent_position,goal)
+            visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
+
 
             # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
             # assert mcts.root.state == observation, "Root state must match observation!"

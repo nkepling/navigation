@@ -45,15 +45,23 @@ static_env: True
 
 #MCTS parameters
 d: 100
-m: 500
-c: 1.4
-c_heuristic: 0.5
-gamma: 0.999
+m: 100
+c: 1.44
+c_heuristic: 1.44
+gamma: 0.9
 heuristic: False
-puct: False
+puct: True
 temperature: 1.0
 tree_depth: null
 vin: null
+
+device: "cuda"
+ 
+rho_min: 0.1
+rho_high: 1.0
+alpha_increase: 0.1
+alpha_decrease: 0.1
+check_frequency: 2
 
 #VIN parameters
 k: 16

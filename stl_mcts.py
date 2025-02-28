@@ -5,109 +5,11 @@ import numpy as np
 import random
 from copy import deepcopy
 import warnings
-from collections import namedtuple
-from vin_agent import VINAgent
+
+from invariant_functions import *
+
 """This is a subclass of the base MCTS implementation where we incorporate STL expressions in to the action selection process
 """
-
-class DistanceCalculator:
-    def __init__(self,area_of_interest):
-        if not isinstance(area_of_interest,np.ndarray):
-            area_of_interest = np.array(area_of_interest)
-        self.area_of_interest = area_of_interest
-
-    def _compute_distance(self,current_location):
-        if not isinstance(current_location,np.ndarray):
-            current_location = np.array(current_location)
-        return np.linalg.norm(current_location - self.area_of_interest,1)
-    
-    def __call__(self, current_location):
-        return self._compute_distance(current_location)
-
-
-class ObstacleDectector:
-    def __init__(self,env):
-        self.obstacles_map = env.unwrapped.obstacles
-        self.map_size = self.obstacles_map.shape
-    
-    def _check_collision(self,current_location):
-        x,y = current_location
-
-        if x < 0 or x >= self.map_size[0] or y < 0 or y >= self.map_size[1]:
-            return -np.inf
-        elif self.obstacles_map[x,y] == 1:
-            return -np.inf
-        return 0
-
-    
-    def __call__(self,current_location):
-        return self._check_collision(current_location)   
-    
-def always_moving_toward_goal(trace,calculator:DistanceCalculator):
-    """To be called during the expansion step 
-
-    Computes the robustnesss degree for the invariant: G_[t_0,t](d(t) - d(t-1) < 0)
-    """
-    if len(trace) < 2:
-        return 0
-    
-    distances = [calculator(p) for p in trace]
-    if distances == []:
-        print("uh oh")
-    robustness_values = [distances[t-1] - distances[t] for t in range(1, len(distances))]
-
-    return min(robustness_values)
-
-# def negative_distance(current_position, goal_position):
-#     return -np.linalg.norm(current_position - goal_position, ord=1)
-
-def negative_distance(trace, calculator):
-    p = trace[-1]
-    distances = calculator(p)
-    return -distances 
-
-def no_collision(trace,calculator):
-    p = trace[-1]
-    return calculator(p)
-
-def penalize_staying_in_same_cell(trace):
-    if len(trace) < 2:
-        return 0
-    if np.array_equal(trace[-1],trace[-2]):
-        return -10
-    return 0
-
-def penalize_indecision(trace,calculators):
-    if len(trace) < 2:
-        return 0
-
-    current_position = trace[-1]
-    previous_position = trace[-2]
-
-    # TODO: Come up with an stl conditon to penealize indicision
-
-    # Calculate distances to each area of interest
-    distances_current = [calculator(current_position) for calculator,w in calculators]
-    distances_previous = [calculator(previous_position) for calculator,w in calculators]
-
-    # Check if the agent is oscillating between two areas of interest
-    if np.argmin(distances_current) != np.argmin(distances_previous):
-        return -10  # Penalize oscillation
-
-    return 0
-
-
-def penalize_changing_direction(trace):
-    if len(trace) < 3:
-        return 0
-
-    current_direction = np.array(trace[-1]) - np.array(trace[-2])
-    previous_direction = np.array(trace[-2]) - np.array(trace[-3])
-
-    # Check if the direction has changed
-    if not np.array_equal(current_direction, previous_direction):
-        return -10  # Penalize changing direction
-    return 0
 
 
   
@@ -125,20 +27,44 @@ class STLMCTS(MCTS):
                  puct=False, 
                  temperature=1, 
                  tree_depth=None,
-                 seed=None):
+                 seed=None,
+                 device=None,
+                 k=None,
+                 rho_min=0.1,
+                 rho_high=1.0,
+                 alpha_increase=0.1,
+                 alpha_decrease=0.1,
+                 check_frequency=None,
+                 spec_function_list=None):
         """MCTS with STL action pruning and SLT robusteness degree guided search.
         """
-        super().__init__(env, state, d, m, c, gamma, heuristic, vin, puct, temperature, tree_depth,seed=seed)
+        super().__init__(env, state, d, m, c, gamma, heuristic, vin, puct, temperature, tree_depth,seed=seed,device=device,k=k)
 
         # Dictionary that keeps track of state visits...
         self.visits = {}
         self.Hsa = {} # Table of heurstic degree of robustness values. 
         self.c_heuristic = c_heuristic
 
+        self.rho_min = rho_min
+        self.rho_high = rho_high
+        self.alpha_increase = alpha_increase
+        self.alpha_decrase = alpha_decrease
+
         self.obstacles_detector = ObstacleDectector(env)
 
+        self.tree_depth = tree_depth
 
-    def search(self,areas_of_interest=[]):
+        if check_frequency is None:
+            self.check_frequency = 1
+        else:
+            self.check_frequency = check_frequency
+
+        self.spec_function_list = spec_function_list
+
+        self.history = [] 
+
+
+    def search(self):
         """Do the MCTS by doing m simulations from the current state s. 
         After doing m simulations we simply choose the action that maximizes the estimate of Q(s,a)
         contstain satisfacoint score... in addition to 
@@ -153,19 +79,6 @@ class STLMCTS(MCTS):
 
         # If there are areas of interest pay attention to that first
 
-        self.areas_of_interest = areas_of_interest
-
-
-        if areas_of_interest:
-            self.heuristic_calculators = [(DistanceCalculator(aoi),w) for aoi,w in areas_of_interest]
-            total_weight = sum([x[1] for x in self.heuristic_calculators])
-            if total_weight != 1.0:
-                warnings.warn("Provided weights do not sum to one, renormalizing")
-                # Normalize the weights
-                self.heuristic_calculators = [(calculator, w / total_weight) for calculator, w in self.heuristic_calculators]
-        else:
-            self.heuristic_calculators = [lambda x: 0]
-
         for k in range(self.m):
             self.sim_env = deepcopy(self.env) # make a deep copy of of the og env at the root nod 
             vl = self._tree_policy(self.v0) #vl is the last node visitied by the tree search as chance node
@@ -175,6 +88,13 @@ class STLMCTS(MCTS):
                 #self.trajectory.append(expanded_node.coord)
             R = self._simulation_policy(expanded_node) #R is the reward from the simulation (default policy)
             self._backpropagation(R,expanded_node)
+
+            if k%self.check_frequency == 0 and k > 0:
+                trace = self._get_best_trace()
+                h = self._compute_heuristic(self.v0,trace)
+                self._adapt_policy(h)
+
+    
             
         action_values = [self.Qsa.get((self.v0.state, a), 0) for a in self.possible_actions] # Q values for s a pairs
         visit_counts = [self.Nsa.get((self.v0.state, a), 0) for a in self.possible_actions]
@@ -185,10 +105,10 @@ class STLMCTS(MCTS):
 
         # ba = np.argmax(final_selection_values)
 
-        print(5*"#")
+        # print(5*"#")
 
-        print("Action vals ", action_values)
-        print("Heuristic vals", hueristic_scores)
+        # print("Action vals ", action_values)
+        # print("Heuristic vals", hueristic_scores)
 
 
         ba = None
@@ -229,8 +149,55 @@ class STLMCTS(MCTS):
         return node
     
     
-    def act(self, observation, forward=False):
-        return super().act(observation, forward)
+    # def act(self, observation, forward=False):
+    #     return super().act(observation, forward)
+    
+    def _get_best_trace(self):
+        depth = 0
+        trace = []
+
+        trace.append(self.v0.coord)
+
+        if self.tree_depth:
+            max_depth = self.tree_depth
+        else:
+            max_depth = 100
+
+        v = self.v0
+
+        while depth < max_depth:
+            if isinstance(v, DecisionNode):
+                best_value = -np.inf
+                best_child = None
+
+                if not v.children:
+                    break
+
+                for child in v.children:
+                    sa = (v.state, child.action)
+                    q_val = self.Qsa.get(sa, 0.0)
+                    h_val = self.Hsa.get(sa, 0.0)
+                    n_val = self.Nsa.get(sa,0.0)
+
+                    value = q_val + self.c_heuristic * h_val
+
+                    if value > best_value and n_val > 0:
+                        best_value = value
+                        best_child = child
+
+                if best_child is None:
+                    break
+
+                v = best_child
+                
+            else: # chance node
+                if v.children:
+                    v = v.children[0] # determenistic setting so it shoudl only have one child
+                    trace.append(v.coord)
+                
+            depth += 1
+
+        return trace
     
     def _selection(self, v: DecisionNode):
 
@@ -257,7 +224,7 @@ class STLMCTS(MCTS):
 
             policy_prior = self._vin_policy(v)[0]
 
-            #TODO: Refine this for noise adding
+            # #TODO: Refine this for noise adding
             noise = np.random.uniform(low=0, high=0.1, size=policy_prior.shape)
             policy_prior = policy_prior + noise
             policy_prior /= policy_prior.sum()
@@ -333,24 +300,24 @@ class STLMCTS(MCTS):
 
         return random.choice(best_nodes) if best_nodes else None
     
-    def _puct(self, v):
-        return super()._puct(v)
-    
-    def _compute_heuristic(self,v:DecisionNode):
+
+    def _compute_heuristic(self,v:DecisionNode,traj=None):
         """Compute robustness heuristic -- distance based heuristic 
         """
-        traj = self._get_trace(v)
-        # heuristic_value = sum([always_moving_toward_goal(traj,calculator)*w for calculator,w in self.heuristic_calculators ])
-        heuristic_value = 0
-        if self.areas_of_interest:
-            heuristic_value += sum([negative_distance(traj,calculator)*w for calculator,w in self.heuristic_calculators ])
-            heuristic_value += penalize_indecision(traj,self.heuristic_calculators)
-        # heuristic_value += no_collision(traj,self.obstacles_detector) #NOTE added after experiments
-        heuristic_value += penalize_staying_in_same_cell(traj) # NOTE added after experiments
-        # heuristic_value += penalize_changing_direction(traj)
 
+        if traj is None:
+            traj = self._get_trace(v)
+
+        if self.spec_function_list is None:
+            raise ValueError
+        
+        if self.history:
+            traj = self.history + traj
+        
+        heuristic_value = conjunction_of_specs(traj,self.spec_function_list)
 
         return heuristic_value
+    
 
     def _prune_actions(self,actions):
         raise NotImplementedError
@@ -359,11 +326,14 @@ class STLMCTS(MCTS):
         assert isinstance(v,DecisionNode)
         trace = []
 
+        node_list = []
+
         v_leaf = v
 
         while v is not None:
             if isinstance(v,DecisionNode):
                 trace.append(v.coord) 
+            node_list.append(v)
             v = v.parent
 
         trace.reverse()
@@ -418,7 +388,7 @@ class STLMCTS(MCTS):
                 assert(type(v) == DecisionNode)
                 self.update_metrics_decision_node(v.state)
             # R = R*(self.gamma**depth)
-            h = h*(self.gamma**depth)
+            # h = h*(self.gamma)
 
             depth+=1
             v = v.parent
@@ -449,7 +419,7 @@ class STLMCTS(MCTS):
             self.Nsa[sa] = 1
             self.Hsa[sa] = h
 
-    def act(self, observation,areas_of_interest=[],forward=False):
+    def act(self, observation,forward=False):
         """
         Decide on an action using the MCTS search, reinitializing the tree structure.
 
@@ -483,13 +453,33 @@ class STLMCTS(MCTS):
             self.Hsa = {}
 
 
-        best_action, _ = self.search(areas_of_interest=areas_of_interest)
+        best_action, _ = self.search()
 
         return best_action
-
     
+    def _adapt_policy(self, rho):
+        """
+        Adjust self.temperature based on STL robustness rho.
+        Optionally set self.add_noise to True if rho < rho_min.
+        """
+        if rho < self.rho_min:
+            # Increase temperature => More exploration
+            delta = self.rho_min - rho
+            self.temperature  = min(self.temperature * np.exp(self.alpha_increase * delta) ,2)
+            #self.c_heuristic += self.alpha_increase * delta
+            self.c_heuristic = min(self.c_heuristic * (1 + self.alpha_increase),5)
+            self.add_noise = True
+            # print(f"Value updated  ",)
+        elif rho > self.rho_high:
+            # Decrease temperature => More exploitation
+            delta = rho - self.rho_high
+            self.temperature = max(self.temperature * np.exp(-self.alpha_decrease * delta),0.8)
+            self.c_heuristic  = max(1,self.c_heuristic * (1-self.alpha_decrase))
+            self.add_noise = False
 
-        
+
+    def update_history(self,coord):
+        self.history.append(coord)
 
 
 if __name__ == "__main__":
@@ -507,7 +497,7 @@ if __name__ == "__main__":
     reward_list = []
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5_2.pth', weights_only=True, map_location=device)
+    vin_weights = torch.load('/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/pytorch_value_iteration_networks/trained/vin_5x5.pth', weights_only=True, map_location=device)
 
     vin =  VIN(SimpleNamespace(**config))
 
@@ -523,8 +513,22 @@ if __name__ == "__main__":
 
     obstacles_map = intit_states["obstacles"]
 
-    mcts = STLMCTS(env,obs,d=10,m=500,c=1.44,gamma=0.9,c_heuristic=1,temperature=2,seed=seed,vin=vin,puct=True)
+
+    # spec1 = AvoidCells([(2,2)])
+
+    # spec2 = VistCells([(2,4),(3,4),(4,4)])
+
+    spec2 = VistCells([(4,4),(4,1)])
+
+    spec1 = TemporalWindowSpec(0,7,[(2,2)])
+
+    # spec3 = VisitInOrder([(4,4),(4,1)])
+
+    spec_list = [spec1,spec2]
+
+    mcts = STLMCTS(env,obs,d=100,m=100,c=1.44,gamma=0.9,c_heuristic=1.44,temperature=1,seed=seed,vin=vin,puct=True,k=16,check_frequency=2,spec_function_list=spec_list)
     #mcts = MCTS(env,obs,d=100,m=500,c=1.4,gamma=0.999)
+    
 
     step = 0 
     collisions = 0  
@@ -536,24 +540,25 @@ if __name__ == "__main__":
     start = time.time()
 
     areas_of_interest = [((4,1),1.0)]
-    # areas_of_interest = []
+
+
+    
+    # areas_of_interest = []qq
 
 
     start = time.time()
     while step < max_steps and not done:
-        #visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
+        # visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
 
-        # mcts = ns_gym.benchmark_algorithms.MCTS(env,observation,d=25,m=100,c=1,gamma=0.999)
-        # assert mcts.root.state == observation, "Root state must match observation!"
-
-        action = mcts.act(obs,areas_of_interest=areas_of_interest, forward=False)
-        # action = mcts.act(obs)
+        action = mcts.act(obs,forward=False)
         obs,reward,done,_,info = env.step(action)
 
         # Check if the agent has reached an area of interest
         current_position = obs[1]
 
-        areas_of_interest = [(aoi, w) for aoi, w in areas_of_interest if not np.array_equal(current_position, aoi)]
+        mcts.update_history(current_position)
+
+        print(mcts.history)
 
         if info["collision"]:
             collisions += 1
@@ -563,9 +568,12 @@ if __name__ == "__main__":
 
         print(f"\rStep count {step}",end="",flush=True)
 
-    
+
+
     print("reward: ",total_reward)
     reward_list.append(total_reward)
+
+    print("c_end ", mcts.c_heuristic)
 
     print("time ", time.time()-start)
 

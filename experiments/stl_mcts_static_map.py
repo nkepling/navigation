@@ -4,10 +4,28 @@ import os
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from stl_mcts import STLMCTS
+from invariant_functions import *
 from tqdm import tqdm
 from .experiment_setup import read_config,run_experiment,run_static_episode
+from pytorch_value_iteration_networks.model import * 
+from types import SimpleNamespace
+import torch
+
+
 
 def new_mcts_agent(env,state,config,seed=None):
+        
+        vin = VIN(SimpleNamespace(**config))
+        vin_weights = torch.load(config["vin_model_weights"],weights_only=True, map_location=config["device"])
+
+        vin = vin.load_state_dict(vin_weights)
+
+        spec2 = VistCells([(4,4),(4,1)])
+
+        spec1 = TemporalWindowSpec(0,7,[(2,2)])
+
+        spec_list = [spec1,spec2]
+
         return STLMCTS(env=env,
                     state=state,
                     d=config["d"],
@@ -16,11 +34,19 @@ def new_mcts_agent(env,state,config,seed=None):
                     gamma=config["gamma"],
                     heuristic=config["heuristic"],
                     c_heuristic=config["c_heuristic"],
-                    vin=config["vin"],
+                    vin=vin,
                     puct=config["puct"],
                     temperature=config["temperature"],
-                    seed=seed
-                    )
+                    seed=seed,
+                    device=config["device"],
+                    k=config["k"],
+                    rho_min=config["rho_min"],
+                    rho_high=config["rho_high"],
+                    alpha_increase=config["alpha_increase"],
+                    alpha_decrease=config["alpha_decrease"],
+                    check_frequency=config["check_frequecy"],
+                    spec_function_list=spec_list
+                        )
 
 def create_agent():
      return new_mcts_agent
