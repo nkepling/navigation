@@ -239,18 +239,14 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
     steps = 0
     collisions = 0
 
-    areas_of_interest = config["areas_of_interest"]
-    areas_of_interest_weights = config["area_of_interest_weight"]
-
-    areas_of_interest = [(a,w) for a ,w in zip(areas_of_interest,areas_of_interest_weights)]
-
     start = time.time() 
     while not done and steps < max_steps:
-        action = agent.act(obs,areas_of_interest)
+        action = agent.act(obs)
         obs,reward,done,_,info = env.step(action)
 
         if hasattr(agent,"history"):
             current_position = obs[1]
+
 
             agent.update_history(current_position)
 
@@ -260,7 +256,7 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
         steps += 1
 
         current_position = obs[1]
-        areas_of_interest = [(aoi, w) for aoi, w in areas_of_interest if not np.array_equal(current_position, aoi)]
+
 
         if info["collision"]:
             collisions += 1
@@ -334,6 +330,7 @@ def run_experiment(config,new_agent_func,static=False):
     params = [(config,new_agent_func,seed,max_steps) for seed in seeds]
 
     results = []
+    print("num_workers ", num_workers)
     
     if static:
         with Pool(num_workers) as pool, tqdm(total=len(params)) as pbar:

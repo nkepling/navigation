@@ -4,7 +4,7 @@ env_seed: 27
 num_workers: 30 
 max_steps: 100
 #num_seeds: 150 
-num_seeds: 150
+num_seeds: 2
 num_workers: 30
 max_steps: 100
 seed_range: [10000, 20000]

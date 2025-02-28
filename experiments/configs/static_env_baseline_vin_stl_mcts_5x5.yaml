@@ -1,11 +1,10 @@
 #Experiments parameters
 experiment_name: "static_env_baseline_stl_mcts_5x5"
 env_seed: 27
-num_workers: 30 
+num_workers: 15
 max_steps: 100
 #num_seeds: 150 
 num_seeds: 150
-num_workers: 30
 max_steps: 100
 seed_range: [10000, 20000]
 
@@ -34,11 +33,6 @@ reward_values:
   - 0.2
   - 0.8
 
-areas_of_interest:
-  - [4,4]
-
-area_of_interest_weight:
-  - 1.0
 
 
 static_env: True

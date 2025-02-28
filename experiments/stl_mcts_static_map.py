@@ -18,7 +18,7 @@ def new_mcts_agent(env,state,config,seed=None):
         vin = VIN(SimpleNamespace(**config))
         vin_weights = torch.load(config["vin_model_weights"],weights_only=True, map_location=config["device"])
 
-        vin = vin.load_state_dict(vin_weights)
+        vin.load_state_dict(vin_weights)
 
         spec2 = VistCells([(4,4),(4,1)])
 
@@ -44,7 +44,7 @@ def new_mcts_agent(env,state,config,seed=None):
                     rho_high=config["rho_high"],
                     alpha_increase=config["alpha_increase"],
                     alpha_decrease=config["alpha_decrease"],
-                    check_frequency=config["check_frequecy"],
+                    check_frequency=config["check_frequency"],
                     spec_function_list=spec_list
                         )
 
