@@ -51,19 +51,20 @@ def new_mcts_agent(env,state,config,seed=None):
 def create_agent():
      return new_mcts_agent
 
-def main(config_path):
+
+def main(config_path,vin_model_weights):
     print("Running baseline MCTS experiment.")
     config  = read_config(config_path)
+    config["vin_model_weights"] = vin_model_weights
     agent_factory = create_agent()
     run_experiment(config,agent_factory,static=True)
-
-
     
 if __name__ == '__main__':
     import argparse
-
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_path',type=str,required=True)
+    parser.add_argument('--vin_model_weights',type=str,required=True)
 
     args = parser.parse_args()
-    main(args.config_path)
+    main(args.config_path,args.vin_model_weights)
