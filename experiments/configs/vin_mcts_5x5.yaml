@@ -24,12 +24,12 @@ living_reward: 0
 collision_penalty: -0.1
 
 #MCTS parameters
-d: 100
+d: 20
 m: 500
 c: 1.4
 gamma: 0.999
 heuristic: False
-puct: False
+puct: True
 temperature: 1.0
 tree_depth: null
 vin: null

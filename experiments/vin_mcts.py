@@ -15,7 +15,7 @@ def new_mcts_agent(env,state,config,seed=None):
         vin = VIN(SimpleNamespace(**config))
         vin_weights = torch.load(config["vin_model_weights"],weights_only=True, map_location=config["device"])
 
-        vin = vin.load_state_dict(vin_weights)
+        vin.load_state_dict(vin_weights)
 
         return MCTS(env=env,
                     state=state,
