@@ -305,7 +305,64 @@ class VisitInOrder:
     def __call__(self, *args, **kwds):
         self.always_visit_in_order(*args)
 
+class DontStayInSameCell:
+    def __init__(self,penalty_lambda=10.0):
+        self.penalty_lambda=10.0
+
+    def never_stay_in_same_coordinate_lambda(self, trace):
+        """
+        Quantitative STL robustness for G( p(t) != p(t+1) ), with a lambda penalty.
+        
+        - If p(t) = p(t+1) for any t, we assign a negative penalty: -penalty_lambda.
+        - Otherwise (no duplicates in consecutive coords), we assign a positive margin (e.g. +1.0).
+        - We then take the minimum over all time steps.
+        
+        Parameters
+        ----------
+        trace : list of positions, where each position is e.g. np.array([x,y]) or a tuple (x, y).
+        penalty_lambda : float
+            The magnitude of the penalty if a violation occurs at any time step.
+        
+        Returns
+        -------
+        float
+            The real-valued robustness measure.
+            - <= 0 indicates that the property was violated (the agent stayed in the same cell at least once).
+            - > 0 indicates satisfaction with some positive margin.
+        """
+
+        penalty_lambda = self.penalty_lambda
+
+        # If there's fewer than 2 positions, there's no step to compare => trivially satisfied
+        if len(trace) < 2:
+            return 1.0
+
+        worst_robustness = float('inf')
+        for t in range(len(trace) - 1):
+            if trace[t] ==trace[t + 1]:
+                # Violation: stayed in the same coordinate => negative penalty
+                r_t = -penalty_lambda
+            else:
+                # No violation for this step => assign a positive margin
+                r_t = 1.0
+
+            # In STL "Always" is the min over time
+            if r_t < worst_robustness:
+                worst_robustness = r_t
+            
+            # Optional short-circuit: if we find a strong negative violation, we can return immediately
+            if worst_robustness <= -penalty_lambda:
+                return worst_robustness
+
+        return worst_robustness
+    
+    def __call__(self, *args, **kwds):
+        return self.never_stay_in_same_coordinate_lambda(*args)
+
+
 
 def conjunction_of_specs(trace,specs):
     h_list = [spec_func(trace) for spec_func in specs]
     return min(h_list)
+
+

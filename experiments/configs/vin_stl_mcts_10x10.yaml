@@ -1,0 +1,54 @@
+#Experiments parameters
+experiment_name: "vin_stl_mcts_10x10"
+num_seeds: 50 
+num_workers: 30 
+max_steps: 100
+seed_range: [10000, 20000]
+
+#Environment parameters
+n: 10 
+rewards_config: "block"
+min_obstacles: 2
+max_obstacles: 5 
+
+num_reward_blocks: [2,5]
+reward_square_size: [1,2]
+obstacle_type: "block"
+obstacle_map: null
+
+obstacle_cluster_prob: 0.0
+obstacle_square_sizes: [1,2]
+
+living_reward: 0
+collision_penalty: -0.1
+
+#MCTS parameters
+d: 100
+m: 100
+c: 1.44
+c_heuristic: 1.44
+gamma: 0.9
+heuristic: False
+puct: True
+temperature: 1.0
+tree_depth: null
+vin: null
+
+device: "cuda"
+ 
+rho_min: 0.1
+rho_high: 1.0
+alpha_increase: 0.1
+alpha_decrease: 0.1
+check_frequency: 2
+
+#VIN parameters
+k: 16
+l_i: 2
+l_h: 150
+l_q: 4
+epochs: 1
+batch_sz: 1
+
+
+

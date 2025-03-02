@@ -3,7 +3,8 @@ import yaml
 import rtamt
 import numpy as np
 import random
-from copy import deepcopy
+from copy import deepcopy,copy
+
 import warnings
 
 from invariant_functions import *
@@ -11,8 +12,6 @@ from invariant_functions import *
 """This is a subclass of the base MCTS implementation where we incorporate STL expressions in to the action selection process
 """
 
-
-  
 class STLMCTS(MCTS):
     def __init__(self,
                  env, 
@@ -35,7 +34,11 @@ class STLMCTS(MCTS):
                  alpha_increase=0.1,
                  alpha_decrease=0.1,
                  check_frequency=None,
-                 spec_function_list=None):
+                 spec_function_list=None,
+                 temp_max=2,
+                 temp_min=0.8,
+                 c_heuristic_max=5,
+                 c_heurisitic_min=1):
         """MCTS with STL action pruning and SLT robusteness degree guided search.
         """
         super().__init__(env, state, d, m, c, gamma, heuristic, vin, puct, temperature, tree_depth,seed=seed,device=device,k=k)
@@ -44,11 +47,14 @@ class STLMCTS(MCTS):
         self.visits = {}
         self.Hsa = {} # Table of heurstic degree of robustness values. 
         self.c_heuristic = c_heuristic
+        self.init_c_heuristic = copy(c_heuristic)
+
+        self.init_temperature = copy(temperature)
 
         self.rho_min = rho_min
         self.rho_high = rho_high
         self.alpha_increase = alpha_increase
-        self.alpha_decrase = alpha_decrease
+        self.alpha_decrease = alpha_decrease
 
         self.obstacles_detector = ObstacleDectector(env)
 
@@ -62,6 +68,13 @@ class STLMCTS(MCTS):
         self.spec_function_list = spec_function_list
 
         self.history = [] 
+        self.temp_max = temp_max
+        self.temp_min = temp_min
+        self.c_heuristic_max = c_heuristic_max
+        self.c_heuristic_min = c_heurisitic_min
+
+
+
 
 
     def search(self):
@@ -243,6 +256,8 @@ class STLMCTS(MCTS):
                 else:
                     # If everything was zero, fall back to uniform
                     policy_prior = np.full_like(policy_prior, 1.0 / len(policy_prior))
+
+                # print("policy prior ", policy_prior)
 
             for child in children:
                 sa = (v.state, child.action)
@@ -452,8 +467,19 @@ class STLMCTS(MCTS):
             self.Qsa = {}
             self.Hsa = {}
 
+        # print("starting temp ", self.temperature)
+        # print("starting c heuristic ", self.c_heuristic)
 
         best_action, _ = self.search()
+
+     
+
+        # print("ending temperature ", self.temperature)
+        # print("ending c heuristic ", self.c_heuristic)
+        # print()
+
+        # self.temperature = self.init_temperature
+        # self.c_heuristic = self.init_c_heuristic
 
         return best_action
     
@@ -462,24 +488,36 @@ class STLMCTS(MCTS):
         Adjust self.temperature based on STL robustness rho.
         Optionally set self.add_noise to True if rho < rho_min.
         """
+
         if rho < self.rho_min:
             # Increase temperature => More exploration
             delta = self.rho_min - rho
-            self.temperature  = min(self.temperature * np.exp(self.alpha_increase * delta) ,2)
+            self.temperature  = min(self.temperature * np.exp(self.alpha_increase * delta) ,self.temp_max)
             #self.c_heuristic += self.alpha_increase * delta
-            self.c_heuristic = min(self.c_heuristic * (1 + self.alpha_increase),5)
+            self.c_heuristic = min(self.c_heuristic * (1 + self.alpha_increase),self.c_heuristic_max)
             self.add_noise = True
+
             # print(f"Value updated  ",)
         elif rho > self.rho_high:
             # Decrease temperature => More exploitation
             delta = rho - self.rho_high
-            self.temperature = max(self.temperature * np.exp(-self.alpha_decrease * delta),0.8)
-            self.c_heuristic  = max(1,self.c_heuristic * (1-self.alpha_decrase))
+            self.temperature = max(self.temperature * np.exp(-self.alpha_decrease * delta),self.temp_min)
+            self.c_heuristic  = max(1,self.c_heuristic * (1-self.alpha_decrease),self.c_heuristic_min)
             self.add_noise = False
 
 
     def update_history(self,coord):
         self.history.append(coord)
+
+
+
+
+
+
+
+
+def grab_area_of_interest(reward_maps):
+    return [tuple(coord) for coord in np.argwhere(reward_maps > 0)]
 
 
 if __name__ == "__main__":
@@ -489,10 +527,10 @@ if __name__ == "__main__":
     from types import SimpleNamespace
     import torch
 
-    config = read_config("/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/experiments/configs/static_env_baseline_vin_stl_mcts_5x5.yaml")
+    config = read_config("/Users/nathankeplinger/Documents/Vanderbilt/Research/ANSR/navigation/experiments/configs/vin_stl_mcts_5x5.yaml")
     
-    seed = config["env_seed"]
-    env = make_env(seed,config)
+    # seed = config["env_seed"]
+    
 
     reward_list = []
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -504,78 +542,99 @@ if __name__ == "__main__":
     vin.load_state_dict(vin_weights)
 
     vin.to(device)
-    vin.eval()
+    # vin.eval()
 
-    #TODO: add noise to prob priods...
-    
-    obs,_ = env.reset(seed=seed)
-    intit_states = env.get_state()
+    # #TODO: add noise to prob priods...
+    for seed in range(10000,10004):
+        env = make_env(seed,config)
+        obs,_ = env.reset(seed=seed)
+        # intit_states = env.get_state()
 
-    obstacles_map = intit_states["obstacles"]
-
-
-    # spec1 = AvoidCells([(2,2)])
-
-    # spec2 = VistCells([(2,4),(3,4),(4,4)])
-
-    spec2 = VistCells([(4,4),(4,1)])
-
-    spec1 = TemporalWindowSpec(0,7,[(2,2)])
-
-    # spec3 = VisitInOrder([(4,4),(4,1)])
-
-    spec_list = [spec1,spec2]
-
-    mcts = STLMCTS(env,obs,d=100,m=100,c=1.44,gamma=0.9,c_heuristic=1.44,temperature=1,seed=seed,vin=vin,puct=True,k=16,check_frequency=2,spec_function_list=spec_list)
-    #mcts = MCTS(env,obs,d=100,m=500,c=1.4,gamma=0.999)
-    
-
-    step = 0 
-    collisions = 0  
-    done = False
-    # This is an upper bound on the size of the state space.
-    # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
-    max_steps  = 100
-    total_reward = 0
-    start = time.time()
-
-    areas_of_interest = [((4,1),1.0)]
+        # obstacles_map = intit_states["obstacles"]
 
 
-    
-    # areas_of_interest = []qq
+        # # spec1 = AvoidCells([(2,2)])
+
+        # # spec2 = VistCells([(2,4),(3,4),(4,4)])
+
+        # spec2 = VistCells([(4,4),(4,1)])
+
+        # spec1 = TemporalWindowSpec(0,7,[(2,2)])
+
+        # # spec3 = VisitInOrder([(4,4),(4,1)])
+
+        reward_map = env.get_state()["rewards"]
+
+        visit_cells = grab_area_of_interest(reward_map)
+        
+
+        # visit_cells = [(2,9),
+        # (6,4),
+        # (5,4),
+        # (5,3),
+        # (6,3),
+        # (8,7)]
+
+        spec1 = VistCells(visit_cells)
+        # spec2 = DontStayInSameCell()
+        spec_list = [spec1]
 
 
-    start = time.time()
-    while step < max_steps and not done:
-        # visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
+        # spec2 = VistCells([(4,4),(4,1)])
 
-        action = mcts.act(obs,forward=False)
-        obs,reward,done,_,info = env.step(action)
+        mcts = STLMCTS(env,obs,d=100,m=100,c=1.44,gamma=0.9,c_heuristic=1.44,temperature=1,seed=seed,vin=vin,puct=True,k=16,check_frequency=2,spec_function_list=spec_list,heuristic=False)
+        #mcts = MCTS(env,obs,d=100,m=500,c=1.4,gamma=0.999)
+        
 
-        # Check if the agent has reached an area of interest
-        current_position = obs[1]
+        step = 0 
+        collisions = 0  
+        done = False
+        # This is an upper bound on the size of the state space.
+        # mcts = MCTS(env,observation,d=100,m=500,c=5,gamma=0.9)
+        max_steps  = 100
+        total_reward = 0
+        start = time.time()
 
-        mcts.update_history(current_position)
+        areas_of_interest = [((4,1),1.0)]
 
-        print(mcts.history)
-
-        if info["collision"]:
-            collisions += 1
-    
-        total_reward += reward
-        step += 1
-
-        print(f"\rStep count {step}",end="",flush=True)
-
+        current_position = None
+        
+        # areas_of_interest = []qq
 
 
-    print("reward: ",total_reward)
-    reward_list.append(total_reward)
+        start = time.time()
+        while step < max_steps and not done:
 
-    print("c_end ", mcts.c_heuristic)
+        
+            visualize_rewards(env.unwrapped.current_rewards,env.unwrapped.obstacles,env.unwrapped.agent_position,(4,4))
 
-    print("time ", time.time()-start)
+
+            action = mcts.act(obs,forward=False)
+            obs,reward,done,_,info = env.step(action)
+
+            # Check if the agent has reached an area of interest
+            current_position = obs[1]
+
+            mcts.update_history(current_position)
+
+
+
+            if info["collision"]:
+                collisions += 1
+        
+            total_reward += reward
+            step += 1
+
+            print(f"\rStep count {step}",end="",flush=True)
+
+
+
+        # print("reward: ",total_reward)
+        # reward_list.append(total_reward)
+
+        # print("c_end ", mcts.c_heuristic)
+
+        # print("time ", time.time()-start)
 
 
 
