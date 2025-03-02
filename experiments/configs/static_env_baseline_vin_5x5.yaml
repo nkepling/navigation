@@ -1,13 +1,13 @@
 #Experiments parameters
-experiment_name: "static_env_baseline_vin_5x5"
+experiment_name: "static_env_baseline_vin_5x5_2"
 env_seed: 27
-num_workers: 30 
+num_workers: 25
 max_steps: 100
-num_seeds: 150 
-num_workers: 30
+#num_seeds: 150 
+# num_seeds: 150
+num_seeds: 150
 max_steps: 100
 seed_range: [10000, 20000]
-device: "cuda"
 
 #Environment parameters
 n: 5
@@ -34,25 +34,29 @@ reward_values:
   - 0.2
   - 0.8
 
-areas_of_interest:
-  - [4,4]
 
-area_of_interest_weight:
-  - 1.0
 
 static_env: True
 
 #MCTS parameters
-d: 20
-m: 500
-c: 1.4
-gamma: 0.999
+d: 100
+m: 100
+c: 1.44
+c_heuristic: 1.44
+gamma: 0.9
 heuristic: False
 puct: True
 temperature: 1.0
 tree_depth: null
 vin: null
 
+device: "cuda"
+ 
+rho_min: 0.1
+rho_high: 1.0
+alpha_increase: 0.1
+alpha_decrease: 0.1
+check_frequency: 2
 
 #VIN parameters
 k: 16
@@ -61,6 +65,8 @@ l_h: 150
 l_q: 4
 epochs: 1
 batch_sz: 1
+
+
 
 
 

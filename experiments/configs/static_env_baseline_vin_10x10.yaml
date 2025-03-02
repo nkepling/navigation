@@ -1,11 +1,10 @@
 #Experiments parameters
-experiment_name: "static_env_baseline_vin_10x10"
+experiment_name: "static_env_baseline_vin_10x10_with_heuristic"
 env_seed: 200
-num_workers: 30 
-max_steps: 300
+num_workers: 25
+max_steps: 200
 #num_seeds: 150 
-num_seeds: 150
-num_workers: 30
+num_seeds: 1
 max_steps: 100
 seed_range: [10000, 20000]
 device: "cuda"
@@ -52,11 +51,11 @@ area_of_interest_weight:
 static_env: True
 
 #MCTS parameters
-d: 20
+d: 100
 m: 500
 c: 1.4
-gamma: 0.999
-heuristic: False
+gamma: 0.9
+heuristic: True
 puct: True
 temperature: 1.0
 tree_depth: null
