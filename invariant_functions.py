@@ -109,48 +109,35 @@ def manhattan_distance(p1, p2):
 class VistCells:
     def __init__(self,target_cells):
         self.target_cells = target_cells
-
+    
     def eventually_visit_cells(self,trace):
         """
-        Quantitative robustness for:
-        \phi = \Diamond (AgentIn(target_cells))
-        
-        At each step t, define:
-        d_t = min_{c in target_cells} manhattan_distance(agent_pos(t), c)
-        r_t = 1 - d_t
-        Then the overall 'Eventually' measure is max_{t} r_t.
-        
-        Parameters
-        ----------
-        trace : list of (x, y) agent positions over time
-        target_cells : list or set of (x, y) grid coordinates to 'eventually' visit
-        
-        Returns
-        -------
-        float
-            Real-valued robustness. 
-            > 0 implies the agent visits or is very close to some target cell at some time.
-            The more positive, the deeper the satisfaction.
-            Negative indicates it never got closer than distance=1 to any cell in target_cells.
+        For each cell c in target_cells, compute \Diamond(AgentIn(c)),
+        then take the conjunction => min of those eventually-measures.
+        This enforces that *each* cell c is visited.
         """
 
         target_cells = self.target_cells
+
+        # If no movement, can't visit anything => strong violation
         if not trace:
-            return -float('inf')  # No movement => cannot visit => strongly violated
+            return 0
+        # We'll gather an 'eventually' measure for each cell
+        eventually_list = []
 
-        # Convert target_cells to a list for iteration
-        target_cells = list(target_cells)
+        for c in target_cells:
+            # Compute 'eventually' measure for cell c
+            # That is: max_{t} [1 - d_t(c)], where d_t(c)=ManhattanDistance(pos(t), c)
+            local_best = -float('inf')
+            for pos in trace:
+                d = manhattan_distance(pos, c)
+                r_t = 1.0 - d
+                if r_t > local_best:
+                    local_best = r_t
+            eventually_list.append(local_best)
 
-        best_robustness = -float('inf')
-        for pos in trace:
-            # Minimum distance to any target cell
-            d_t = min(manhattan_distance(pos, c) for c in target_cells)
-            # r_t = 1 - distance
-            r_t = 1.0 - d_t
-            if r_t > best_robustness:
-                best_robustness = r_t
-
-        return best_robustness
+    # Conjunction of eventually means min over all c
+        return min(eventually_list)
     
     def __call__(self, *args, **kwds):
         return self.eventually_visit_cells(*args)
@@ -259,7 +246,8 @@ class TemporalWindowSpec:
             if min_dist == 0:
                 r_t = -2.0   # strongly violated
             elif min_dist == 1:
-                r_t = -0.1   # mild penalty
+                #r_t = -0.1   # mild penalty
+                r_t = 0.0
             else:
                 r_t = 0.5    # safe margin
             
