@@ -162,10 +162,8 @@ def run_episode(config,new_agent_func,seed,max_steps):
     while not done and steps < max_steps:
         action = agent.act(obs)
         obs,reward,done,_,info = env.step(action)
-        
+        current_position = obs[1]
         if hasattr(agent,"history"):
-            current_position = obs[1]
-
             agent.update_history(current_position)
 
         result["trajectory"].append(current_position)
@@ -243,11 +241,9 @@ def run_static_episode(config,new_agent_func,seed,max_steps):
     while not done and steps < max_steps:
         action = agent.act(obs)
         obs,reward,done,_,info = env.step(action)
-
+        current_position = obs[1]
         if hasattr(agent,"history"):
-            current_position = obs[1]
-
-
+       
             agent.update_history(current_position)
 
         result["trajectory"].append(current_position)

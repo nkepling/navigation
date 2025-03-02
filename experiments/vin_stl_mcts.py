@@ -22,9 +22,16 @@ def new_mcts_agent(env,state,config,seed=None):
 
         reward_map = env.unwrapped.starting_rewards
 
-        spec1 = grab_area_of_interest(reward_map)
+        aoi = grab_area_of_interest(reward_map)
 
-        spec_list = [spec1]
+        spec1 = VistCells(aoi)
+        spec2 = DontStayInSameCell(penalty_lambda=1)
+        spec3 = PenalizeRevisitation()
+
+
+        spec_list = [spec1,spec2,spec3]
+
+        
 
         return STLMCTS(env=env,
                     state=state,

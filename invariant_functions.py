@@ -1,4 +1,5 @@
 import numpy as np
+from collections import defaultdict
 
 
 class DistanceCalculator:
@@ -358,6 +359,61 @@ class DontStayInSameCell:
     
     def __call__(self, *args, **kwds):
         return self.never_stay_in_same_coordinate_lambda(*args)
+    
+class PenalizeRevisitation:
+
+    def __init__(self,penalty=0.5):
+        self.penalty = penalty
+
+    def penalize_revisiting_cells(self,trace):
+        """
+        Quantitative STL-style robustness that penalizes revisiting any cell.
+        
+        - If at time t the agent is in a cell it has already occupied
+        at any time < t, we incur a penalty (by default, -5).
+        - Otherwise, 0 penalty.
+        - We take the 'Always' aggregator => min over time steps.
+
+        Parameters
+        ----------
+        trace : list
+            List of positions, each position e.g. np.array([x,y]) or tuple(x, y).
+        penalty : float
+            Negative penalty applied each time a cell is revisited.
+
+        Returns
+        -------
+        float
+            The minimum local robustness across time (STL 'Always').
+            <= 0 => a violation (some cell revisited).
+            > 0  => no cell was revisited.
+            Note: you can adjust how "strong" a violation is by using larger negative penalty.
+        """
+
+        if len(trace) < 2:
+            return 0 
+        
+        scale = self.penalty
+
+        visited_counts = defaultdict(int)
+        worst_r = float('inf')
+
+        for pos in trace:
+            key = tuple(pos)
+            visited_counts[key] += 1
+            count = visited_counts[key]
+        
+            # Local penalty: 1 - (count * scale)
+            r_t = 1.0 - (count * scale)
+        
+            # "Always" => take min over all time
+            if r_t < worst_r:
+                worst_r = r_t
+
+        return worst_r
+    
+    def __call__(self, *args, **kwds):
+        return self.penalize_revisiting_cells(*args)
 
 
 
