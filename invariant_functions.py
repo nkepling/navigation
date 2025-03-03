@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from collections import defaultdict
 
 
@@ -244,12 +245,12 @@ class TemporalWindowSpec:
             
             # 2) Piecewise logic
             if min_dist == 0:
-                r_t = -2.0   # strongly violated
+                r_t = -1.0   # strongly violated
             elif min_dist == 1:
                 #r_t = -0.1   # mild penalty
                 r_t = 0.0
             else:
-                r_t = 0.5    # safe margin
+                r_t = 1.0    # safe margin
             
             # 3) Update worst_r (minimum over the interval)
             if r_t < worst_r:
@@ -402,6 +403,155 @@ class PenalizeRevisitation:
     
     def __call__(self, *args, **kwds):
         return self.penalize_revisiting_cells(*args)
+    
+
+
+def local_robustness_avoid(trace, start_t, end_t, forbidden_cells):
+    """
+    Returns a list of per-timestep robustness values for 
+    "Avoid forbidden_cells from t=start_t..end_t."
+
+    local_robustness[t] = piecewise measure at time t only.
+    """
+    T = len(trace)
+    values = []
+
+    for t in range(T):
+        # If t outside [start_t, end_t], we treat it as not constrained => +1.0
+        if t < start_t or t > end_t:
+            values.append(1.0)
+            continue
+
+        pos = trace[t]
+        # Compute min distance to any forbidden cell
+        min_dist = float('inf')
+        for fc in forbidden_cells:
+            d = manhattan_distance(pos, fc)
+            if d < min_dist:
+                min_dist = d
+            if min_dist == 0:
+                break
+
+        # Piecewise logic
+        if min_dist == 0:
+            # On a forbidden cell => negative
+            r_t = -1.0
+        elif min_dist == 1:
+            r_t = 0.0
+        else:
+            r_t = 1.0
+
+        values.append(r_t)
+
+    return values
+
+
+def local_robustness_visit_all(trace, target_cells):
+    """
+    local2[t] = +1.0 if by time t we've visited *all* target_cells,
+                 or a negative if we have visited partial or none.
+    For a continuous measure, you could scale by fraction visited.
+    """
+    T = len(trace)
+    visited_set = set()
+    target_cells = set(target_cells)
+
+    values = []
+
+    for t in range(T):
+        pos = tuple(trace[t])
+        visited_set.add(pos)
+
+        # Check how many target cells are visited
+        num_visited = sum(1 for c in target_cells if c in visited_set)
+        fraction_visited = num_visited / len(target_cells) if target_cells else 1.0
+
+        # If all visited => local2[t] = +1
+        # else scale linearly: e.g. local2[t] = 2*fraction_visited - 1
+        # That way 0% => -1, 100% => +1
+        r_t = 2.0*fraction_visited - 1.0
+
+        values.append(r_t)
+
+    return values
+
+
+
+def until_robustness(local1, local2):
+    """
+    Compute robustness for (phi1 U phi2) from time t=0..T-1,
+    given local1[t], local2[t] for t in [0..T-1].
+    """
+    T = len(local1)
+    assert len(local2) == T, "local1, local2 must have same length"
+
+    if T == 0:
+        return -math.inf  # no time to satisfy
+
+    best_val = -math.inf
+
+    for t_prime in range(T):
+        # Evaluate phi2 at time t_prime
+        val2 = local2[t_prime]
+
+        # Evaluate phi1 from time 0 up to t_prime-1
+        if t_prime == 0:
+            # No times before 0
+            val1_interm = math.inf
+        else:
+            val1_interm = min(local1[tau] for tau in range(t_prime))
+
+        # Candidate aggregator for finishing at t_prime
+        local_val = min(val2, val1_interm)
+
+        # Take max over all possible t_prime
+        if local_val > best_val:
+            best_val = local_val
+
+    return best_val
+
+
+
+
+
+class StaticEnvExpSpec:
+    """
+    """
+    def __init__(self,start_t,end_t,forbidden_cells,target_cells):
+         self.start_t = start_t
+         self.end_t = end_t
+         self.forbidden_cells = forbidden_cells
+         self.target_cells = target_cells
+    
+    def bounded_until_avoid_then_visit(self, trace):
+        """
+        STL Bounded Until for:
+        (Avoid forbidden_cells in [start_t..end_t]) U (Eventually visit all target_cells).
+
+        Returns a single scalar robustness.
+        
+        1) local1[t] = how well we avoid forbidden cells at time t if t in [start_t..end_t].
+        2) local2[t] = how many target_cells have been visited by time t => eventually measure.
+        3) final = Until aggregator over t=0..T-1.
+        """
+
+
+        # 1) local array for the "avoid" spec
+        local1 = local_robustness_avoid(trace, self.start_t, self.end_t, self.forbidden_cells)
+
+        # 2) local array for the "eventually visit" spec
+        local2 = local_robustness_visit_all(trace, self.target_cells)
+
+        # 3) Combine them with the standard "Until" aggregator
+        return until_robustness(local1, local2)
+
+    def __call__(self,*args,**kwargs):
+        return self.bounded_until_avoid_then_visit(*args)
+
+
+
+
+
 
 
 
